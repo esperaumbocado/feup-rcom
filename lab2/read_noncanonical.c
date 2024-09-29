@@ -9,7 +9,7 @@
 
 // Baudrate settings are defined in <asm/termbits.h>, which is
 // included by <termios.h>
-#define BAUDRATE B38400
+#define BAUDRATE B9600
 #define _POSIX_SOURCE 1 // POSIX compliant source
 
 #define FALSE 0
@@ -74,37 +74,38 @@ int main(int argc, char *argv[])
     printf("New termios structure set\n");
 
     unsigned char buf[BUF_SIZE + 1] = {0}; 
-    int count = 0;
 
     while (STOP == FALSE)
     {
+        printf("Waiting for frame\n");
         read(fd, buf, BUF_SIZE);
+        printf("Frame received\n");
         
         // Check if a valid frame is received
         if ((buf[0] == 0x7E) && (buf[1] == 0x03) && (buf[2] == 0x03) && (buf[3] == (buf[1] ^ buf[2])) && (buf[4] == 0x7E)) {
-            printf("Match");
-            printf("var = 0x%02X\n", buf[0]);
-            printf("var = 0x%02X\n", buf[1]);
-            printf("var = 0x%02X\n", buf[2]);
-            printf("var = 0x%02X\n", buf[3]);
-            printf("var = 0x%02X\n", buf[4]);
+            printf("====================================\n");
+            printf("Correct SET WORD received.\n");
+            printf("FLAG = 0x%02X\n", buf[0]);
+            printf("A = 0x%02X\n", buf[1]);
+            printf("C = 0x%02X\n", buf[2]);
+            printf("BCC = 0x%02X\n", buf[3]);
+            printf("====================================\n");
             unsigned char buf2[BUF_SIZE] = {
                 0x7E,        // Flag (start)
-                0x01,        // Address field
+                0x03,        // Address field
                 0x07,        // Control field (UA command, for example)
                 0x00,        // BCC (Address XOR Control)
                 0x7E         // Flag (end)
             };
             buf2[3] = buf2[1] ^ buf2[2];
+            printf("Sending UA frame\n");
             int bytes = write(fd, buf2, BUF_SIZE);
+            printf("%d bytes written\n", bytes);
+            printf("====================================\n");
             if (bytes < 0) {
                perror("write");
                exit(-1);
             }
-        }
-        count++;
-        if (count >= 3) {
-            STOP = TRUE;
         }
     }
 
