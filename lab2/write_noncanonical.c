@@ -10,7 +10,9 @@
 #include <sys/stat.h>
 #include <termios.h>
 #include <unistd.h>
+#include <signal.h>
 #include "definitions.h"
+
 
 // Baudrate settings are defined in <asm/termbits.h>, which is
 // included by <termios.h>
@@ -23,6 +25,36 @@
 #define BUF_SIZE 5
 
 volatile int STOP = FALSE;
+
+unsigned char buf[BUF_SIZE] = {0};
+int fd;
+
+
+int alarmEnabled = FALSE;
+int alarmCount = 0;
+
+void alarmHandler(int signal)
+{
+    alarmEnabled = FALSE;
+    alarmCount++;
+
+    printf("====================================\n");
+    printf("Alarm #%d\n", alarmCount);
+
+    buf[0] = FLAG;
+    buf[1] = A_SENDER;
+    buf[2] = C_SET;
+    buf[3] = A_SENDER ^ C_SET;
+    buf[4] = FLAG;
+
+    int bytes = write(fd, buf, BUF_SIZE);
+    printf("%d bytes written\n", bytes);
+    printf("====================================\n");
+
+
+}
+
+
 
 int main(int argc, char *argv[])
 {
@@ -41,7 +73,7 @@ int main(int argc, char *argv[])
 
     // Open serial port device for reading and writing, and not as controlling tty
     // because we don't want to get killed if linenoise sends CTRL-C.
-    int fd = open(serialPortName, O_RDWR | O_NOCTTY);
+    fd = open(serialPortName, O_RDWR | O_NOCTTY);
 
     if (fd < 0)
     {
@@ -68,7 +100,7 @@ int main(int argc, char *argv[])
 
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
-    newtio.c_cc[VTIME] = 0; // Inter-character timer unused
+    newtio.c_cc[VTIME] = 30; // Inter-character timer unused
     newtio.c_cc[VMIN] = 5;  // Blocking read until 5 chars received
 
     // VTIME e VMIN should be changed in order to protect with a
@@ -90,36 +122,41 @@ int main(int argc, char *argv[])
 
     printf("New termios structure set\n");
 
-    // Create string to send
-    unsigned char buf[BUF_SIZE] = {0};
-
-    // Construction of set word;
-    buf[0] = FLAG;
-    buf[1] = A_SENDER;
-    buf[2] = C_SET;
-    buf[3] = A_SENDER ^ C_SET;
-    buf[4] = FLAG;
-
-
-    int bytes = write(fd, buf, BUF_SIZE);
-    printf("%d bytes written\n", bytes);
-
     // Wait until all bytes have been written to the serial port
     sleep(1);
 
+    (void)signal(SIGALRM, alarmHandler);
+
     // Waiting for UA response
+
     unsigned char feedback_buf[BUF_SIZE + 1] = {0};
+
+    
     while (STOP == FALSE)
     {
+        if (alarmCount > 2)
+        {
+            printf("Alarm count exceeded\n");
+            break;
+        }
+
+        if (alarmEnabled == FALSE)
+        {
+            alarm(3); // Set alarm to be triggered in 3s
+            alarmEnabled = TRUE;
+        }
+
+        printf("Waiting for frame\n");
         int bytes = read(fd, feedback_buf, BUF_SIZE);
+        printf("Frame received\n");
         buf[bytes] = '\0'; 
 
 
         // Checking UA WORD
         if (feedback_buf[0] == FLAG &&
-            feedback_buf[1] == A_RECEIVER &&
+            feedback_buf[1] == A_SENDER &&
             feedback_buf[2] == C_UA &&
-            feedback_buf[3] == (A_RECEIVER ^ C_UA) &&
+            feedback_buf[3] == (feedback_buf[1]^feedback_buf[2]) &&
             feedback_buf[4] == FLAG){
                 printf("====================================\n");
                 printf("Correct UA WORD received.\n");
@@ -129,7 +166,10 @@ int main(int argc, char *argv[])
                 printf("BCC = 0x%02X\n", ((feedback_buf[2])^(feedback_buf[3])));
                 printf("====================================\n");
                 STOP = TRUE;
+                alarm(0);
+                alarmEnabled = FALSE;
             }
+        
     }
 
     // Restore the old port settings
