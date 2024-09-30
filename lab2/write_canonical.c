@@ -46,10 +46,8 @@ int main(int argc, char *argv[])
         perror(serialPortName);
         exit(-1);
     }
-
     struct termios oldtio;
     struct termios newtio;
-
     // Save current port settings
     if (tcgetattr(fd, &oldtio) == -1)
     {
