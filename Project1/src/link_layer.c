@@ -1,15 +1,28 @@
 
 #include "link_layer.h"
 #include "serial_port.h"
+#include "definitions.h"
 #include <termios.h>
 #include <unistd.h>
 
 #define _POSIX_SOURCE 1 
+#define FLAG 0x7E
+#define A_SENDER 0X03
+#define A_RECEIVER 0X01
+#define BUF_SIZE 5
+#define C_SET 0x03
+#define C_UA 0x07
+#define FALSE 0
+#define TRUE 1
+#define ERROR_OPENING -1
 
-typedef enum {START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, STOP} message_state; message_state state = START;
+typedef enum {START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, STOP} message_state; 
+message_state state = START;
 
 int alarm_cycle = 0;
-bool alarm_activated = FALSE;
+int alarm_activated = FALSE;
+int trys = 0;
+int security_time = 0;
 
 ////////////////////////////////////////////////
 // LLOPEN
@@ -26,8 +39,9 @@ int llopen(LinkLayer connectionParameters)
     if (fd < 0)
     {
         perror(serialPort);
-        return -1;
+        return ERROR_OPENING;
     }
+
     struct termios oldtio;
     struct termios newtio;
 
@@ -45,7 +59,7 @@ int llopen(LinkLayer connectionParameters)
 
     newtio.c_lflag = 0;
     newtio.c_cc[VTIME] = 30;
-    newtio.c_cc[VMIN] = 5;  
+    newtio.c_cc[VMIN] = 5;
     tcflush(fd, TCIOFLUSH);
 
     if (tcsetattr(fd, TCSANOW, &newtio) == -1)
@@ -53,69 +67,211 @@ int llopen(LinkLayer connectionParameters)
         perror("tcsetattr");
         exit(-1);
     }
+    
     if (openSerialPort(connectionParameters.serialPort,
                        connectionParameters.baudRate) < 0)
     {
         return -1;
     }
+
     switch (connectionParameters.role)
     {
     case LlTx:
         (void)signal(SIGALRM, alarmHandler);
-        unsigned char feedback_buf[5] = {0};
-        
-    
-    while (STOP == FALSE)
-    {
-        if (alarmCount > 2)
+        unsigned char set_frame[BUF_SIZE] = {FLAG, A_SENDER, C_SET, A_SENDER ^ C_SET, FLAG};
+        int bytes = write(fd, set_frame, BUF_SIZE);
+        trys = connectionParameters.nRetransmissions;
+        security_time = connectionParameters.timeout;
+
+        while (trys != 0 && state != STOP)
         {
-            printf("Alarm count exceeded\n");
-            break;
-        }
-
-        if (alarmEnabled == FALSE)
-        {
-            alarm(3); // Set alarm to be triggered in 3s
-            alarmEnabled = TRUE;
-        }
-
-        printf("Waiting for frame\n");
-        int bytes = read(fd, feedback_buf, BUF_SIZE);
-        printf("Frame received\n");
-        buf[bytes] = '\0'; 
-
-
-        // Checking UA WORD
-        if (feedback_buf[0] == FLAG &&
-            feedback_buf[1] == A_SENDER &&
-            feedback_buf[2] == C_UA &&
-            feedback_buf[3] == (feedback_buf[1]^feedback_buf[2]) &&
-            feedback_buf[4] == FLAG){
-                printf("====================================\n");
-                printf("Correct UA WORD received.\n");
-                printf("FLAG = 0x%02X\n", feedback_buf[0]);
-                printf("A = 0x%02X\n", feedback_buf[1]);
-                printf("C = 0x%02X\n", feedback_buf[2]);
-                printf("BCC = 0x%02X\n", ((feedback_buf[2])^(feedback_buf[3])));
-                printf("====================================\n");
-                STOP = TRUE;
-                alarm(0);
-                alarmEnabled = FALSE;
+            alarm(security_time);
+            alarm_activated = FALSE;
+            while (alarm_activated != TRUE && state != STOP)
+            {
+                buf[0] = 0x00;
+                read(fd, buf, 1);
+                printf("F = 0x%02X\n", buf[0]);
+                if (state == START)
+                {
+                    if (buf[0] == FLAG)
+                    {
+                        state = FLAG_RCV;
+                        printf("START->FLAG\n");
+                    }
+                    else
+                    {
+                        state = START;
+                        printf("START->START\n");
+                    }
+                }
+                else if (state == FLAG_RCV)
+                {
+                    if (buf[0] == FLAG)
+                    {
+                        state = FLAG_RCV;
+                        printf("FLAG->FLAG\n");
+                    }
+                    else if (buf[0] == A_RECEIVER)
+                    {
+                        state = A_RCV;
+                        printf("FLAG->A_RCV\n");
+                    }
+                    else
+                    {
+                        state = START;
+                        printf("FLAG->START\n");
+                    }
+                }
+                else if (state == A_RCV)
+                {
+                    if (buf[0] == FLAG)
+                    {
+                        state = FLAG_RCV;
+                        printf("A_RCV->FLAG\n");
+                    }
+                    else if (buf[0] == C_UA)
+                    {
+                        state = C_RCV;
+                        printf("A_RCV->C_RCV\n");
+                    }
+                    else
+                    {
+                        state = START;
+                        printf("A_RCV->START\n");
+                    }
+                }
+                else if (state == C_RCV)
+                {
+                    if (buf[0] == FLAG)
+                    {
+                        state = FLAG_RCV;
+                        printf("C_RCV->FLAG\n");
+                    }
+                    else if (buf[0] == (A_RECEIVER ^ C_UA))
+                    {
+                        state = BCC_OK;
+                        printf("C_RCV->BCC\n");
+                    }
+                    else
+                    {
+                        state = START;
+                        printf("C_RCV->START\n");
+                    }
+                }
+                else if (state == BCC_OK)
+                {
+                    if (buf[0] == FLAG)
+                    {
+                        state = STOP;
+                        printf("ACABOU GG\n");
+                    }
+                    else
+                    {
+                        state = START;
+                        printf("BCC->START\n");
+                    }
+                }
             }
-        
-
-
+        }
         break;
-    }
+
     case LlRx:
+        unsigned char frame[BUF_SIZE] = {0};
+        read(fd, frame, 1);
+        printf("F = 0x%02X\n", buf[0]);
         
+        while (state != STOP)
+        {
+            if (state == START)
+            {
+                if (buf[0] == FLAG)
+                {
+                    state = FLAG_RCV;
+                    printf("START->FLAG\n");
+                }
+                else
+                {
+                    state = START;
+                    printf("START->START\n");
+                }
+            }
+            else if (state == FLAG_RCV)
+            {
+                if (buf[0] == FLAG)
+                {
+                    state = FLAG_RCV;
+                    printf("FLAG->FLAG\n");
+                }
+                else if (buf[0] == A_SENDER)
+                {
+                    state = A_RCV;
+                    printf("FLAG->A_RCV\n");
+                }
+                else
+                {
+                    state = START;
+                    printf("FLAG->START\n");
+                }
+            }
+            else if (state == A_RCV)
+            {
+                if (buf[0] == FLAG)
+                {
+                    state = FLAG_RCV;
+                    printf("A_RCV->FLAG\n");
+                }
+                else if (buf[0] == C_SET)
+                {
+                    state = C_RCV;
+                    printf("A_RCV->C_RCV\n");
+                }
+                else
+                {
+                    state = START;
+                    printf("A_RCV->START\n");
+                }
+            }
+            else if (state == C_RCV)
+            {
+                if (buf[0] == FLAG)
+                {
+                    state = FLAG_RCV;
+                    printf("C_RCV->FLAG\n");
+                }
+                else if (buf[0] == (A_SENDER ^ C_SET))
+                {
+                    state = BCC_OK;
+                    printf("C_RCV->BCC\n");
+                }
+                else
+                {
+                    state = START;
+                    printf("C_RCV->START\n");
+                }
+            }
+            else if (state == BCC_OK)
+            {
+                if (buf[0] == FLAG)
+                {
+                    state = STOP;
+                    printf("ACABOU GG\n");
+                }
+                else
+                {
+                    state = START;
+                    printf("BCC->START\n");
+                }
+            }
+        }
         break;
     }
 
-    // TODO
-
+    unsigned char ua_frame[BUF_SIZE] = {FLAG, A_SENDER, C_SET, A_SENDER ^ C_SET, FLAG};
+    bytes = write(fd, ua_frame, BUF_SIZE);
     return 1;
 }
+
 
 ////////////////////////////////////////////////
 // LLWRITE

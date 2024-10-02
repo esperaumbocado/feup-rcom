@@ -73,10 +73,8 @@ unsigned char buf[2] = {0};
 
 while (state != STOP)
 {
-    buf[0] = 0x00;
     read(fd, buf, 1);
     printf("F = 0x%02X\n", buf[0]);        
-    // Check if a valid frame is received
     if (state == START) {
         if (buf[0] == FLAG) {
             state = FLAG_RCV;
@@ -114,7 +112,6 @@ while (state != STOP)
             state = START;
             printf("A_RCV->START\n");
         }
-        
     }
     else if (state == C_RCV) {
         if (buf[0] == FLAG) {
