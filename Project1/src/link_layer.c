@@ -22,10 +22,15 @@
 #define C_UA 0x07
 #define C_INF_0 0x00
 #define C_INF_1 0x80
+#define C_REJ_0 0x54
+#define C_REJ_1 0x55
+#define RR_0 0xAA
+#define RR_1 0xAB
 #define FALSE 0
 #define TRUE 1
 #define I_FRAME_SIZE 6
 #define ERROR_OPENING -1
+#define ESCAPE 0x7d
 
 typedef enum {START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, DATA, STOP} message_state; 
 typedef enum {FRAME_ACCEPTED, FRAME_REJECTED} t_state;
@@ -39,6 +44,10 @@ int security_time = 0;
 int Ns = 0;
 int Nr = 1;
 
+void sendConnectionFrame(unsigned char A_field, unsigned char C_field) {
+    unsigned char set_frame[BUF_SIZE] = {FLAG, A_field, C_field, A_field ^ C_field, FLAG};
+    writeBytesSerialPort(set_frame, BUF_SIZE);
+}
 
 void alarmHandler(int signal) {
     alarm_activated = TRUE;
@@ -293,6 +302,9 @@ int llwrite(const unsigned char *buf, int bufSize)
 ////////////////////////////////////////////////
 int llread(unsigned char *packet)
 {
+    int packet_ind = 0;
+    unsigned char buf;
+    unsigned char bcc2;
     while (trys != 0 && state != STOP)
         {
             alarm(security_time);
@@ -358,7 +370,7 @@ int llread(unsigned char *packet)
                 }
                 else if (buf == (A_SENDER ^ C_SET))
                 {
-                    state = BCC_OK;
+                    state = DATA;
                     printf("C_RCV->BCC\n");
                 }
                 else
@@ -367,17 +379,32 @@ int llread(unsigned char *packet)
                     printf("C_RCV->START\n");
                 }
             }
-            else if (state == BCC_OK)
-            {
-                if (buf == FLAG)
-                {
-                    state = STOP;
-                    printf("ACABOU GG\n");
+            else if (state == DATA) {
+                if (buf == ESCAPE) {
+                    packet[packet_ind] = buf;
+                    packet_ind++;
+                    packet[packet_ind] = 0x5d;
+                    packet_ind++;
                 }
-                else
-                {
-                    state = START;
-                    printf("BCC->START\n");
+                else if (buf == FLAG) {
+                    packet[packet_ind] = buf;
+                    packet_ind++;
+                    packet[packet_ind] = 0x5e;
+                    packet_ind++;
+                    if (bcc2 == packet[packet_ind - 1]) {
+                        state = STOP;
+                        return packet_ind;
+                    }
+                    else {
+                        unsigned char c = Ns == 1 ? C_REJ_1: C_REJ_0;
+                        sendConnectionFrame(A_RECEIVER, c);
+                        return -1;
+                    }
+                }
+                else {
+                    bcc2 = (packet_ind == 0) ? packet : bcc2 ^ packet;
+                    packet[packet_ind] = buf;
+                    packet_ind+;
                 }
             }
         }
