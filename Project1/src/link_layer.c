@@ -32,7 +32,7 @@
 #define ERROR_OPENING -1
 #define ESCAPE 0x7d
 
-typedef enum {START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, DATA, STOP} message_state; 
+typedef enum {START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, DATA, DATA_ESCPAPE_READ, DATA_FLAG_READ, STOP} message_state; 
 typedef enum {FRAME_ACCEPTED, FRAME_REJECTED, WAITING} t_state;
 message_state state = START;
 t_state transmission_state = WAITING;
@@ -44,7 +44,7 @@ int security_time = 0;
 int Ns = 0;
 int Nr = 1;
 
-int iterate_n(int n) {
+int N(int n) {
     return (n + 1) % 2;
 }
 
@@ -273,17 +273,39 @@ int llopen(LinkLayer connectionParameters)
 int llwrite(const unsigned char *buf, int bufSize)
 {
     transmission_state = WAITING;
+    unsigned char b;
     int full_size = I_FRAME_SIZE + bufSize;
+    for (int buf_byte = 0; buf_byte < bufSize; buf_byte++) {
+        if ((buf[buf_byte] == ESCAPE) || (buf[buf_byte] == FLAG)) {
+           full_size++;
+        }
+    }
     unsigned char i_frame[full_size];
     i_frame[SYNC_BYTE_1] = FLAG;
     i_frame[ADRESS_FIELD] = A_SENDER;
     i_frame[CONTROL_FIELD] = N(Ns);
     i_frame[HEADER_PROTECTION_FIELD] = i_frame[ADRESS_FIELD] ^ i_frame[CONTROL_FIELD];
     unsigned char BCC2 = buf[0];
-    i_frame[DATA_FIELD] = buf[0];
-    for (int buf_byte = 1; i < buf_byte, buf_byte++) {
-        i_frame[DATA_FIELD + buf_byte] = buf[buf_byte];
-        BCC2 = BCC2 ^ buf[buf_byte];
+    for (int bcc_byte = 1; bcc_byte < bufSize; bcc_byte++) {
+        BCC2 = BCC2 ^ buf[bcc_byte];
+    }
+    int increment = 0;
+    for (int buf_byte = 0; buf_byte < bufSize; buf_byte++) {
+        if (buf[buf_byte] == ESCAPE) {
+            i_frame[DATA_FIELD + buf_byte + increment] = 0x7d;
+            increment++;
+            full_size++;
+            i_frame[DATA_FIELD + buf_byte + increment] = 0x5e;
+        }
+        else if (buf[buf_byte] == FLAG) {
+            i_frame[DATA_FIELD + buf_byte + increment] = 0x7d;
+            increment++;
+            full_size++;
+            i_frame[DATA_FIELD + buf_byte + increment] = 0x5d;
+        }
+        else {
+            i_frame[DATA_FIELD + buf_byte + increment] = buf[buf_byte];
+        }
     }
     i_frame[DATA_PROTECTION_FIELD + bufSize] = BCC2;
     i_frame[SYNC_BYTE_2 + bufSize] = FLAG;
@@ -294,10 +316,10 @@ int llwrite(const unsigned char *buf, int bufSize)
             alarm_activated = FALSE;
             while (alarm_activated != TRUE && state != STOP)
             {
-                if(readByteSerialPort(&buf) < 0) perror("Connection error\n");
+                if(readByteSerialPort(&b) < 0) perror("Connection error\n");
                 if (state == START)
                 {
-                    if (buf == FLAG)
+                    if (b == FLAG)
                     {
                         state = FLAG_RCV;
                         printf("START->FLAG\n");
@@ -310,12 +332,12 @@ int llwrite(const unsigned char *buf, int bufSize)
                 }
                 else if (state == FLAG_RCV)
                 {
-                    if (buf == FLAG)
+                    if (b == FLAG)
                     {
                         state = FLAG_RCV;
                         printf("FLAG->FLAG\n");
                     }
-                    else if (buf == A_RECEIVER)
+                    else if (b == A_RECEIVER)
                     {
                         state = A_RCV;
                         printf("FLAG->A_RCV\n");
@@ -328,12 +350,12 @@ int llwrite(const unsigned char *buf, int bufSize)
                 }
                 else if (state == A_RCV)
                 {
-                    if (buf == FLAG)
+                    if (b == FLAG)
                     {
                         state = FLAG_RCV;
                         printf("A_RCV->FLAG\n");
                     }
-                    else if (buf == C_UA)
+                    else if (b == C_UA)
                     {
                         state = C_RCV;
                         printf("A_RCV->C_RCV\n");
@@ -346,16 +368,16 @@ int llwrite(const unsigned char *buf, int bufSize)
                 }
                 else if (state == C_RCV)
                 {
-                    if ((buf == C_REJ_0) || (buf == C_REJ_1) )
+                    if ((b == C_REJ_0) || (b == C_REJ_1) )
                     {
                         transmission_state = FRAME_REJECTED;
                         state = FLAG_RCV;
                         printf("C_RCV->FLAG\n");
                     }
-                    else if ((buf == C_INF_0) || (buf == C_INF_1))
+                    else if ((b == C_INF_0) || (b == C_INF_1))
                     {
                         transmission_state = FRAME_ACCEPTED;
-                        Ns = iterate_n(Ns);
+                        Ns = N(Ns);
                         state = BCC_OK;
                         printf("C_RCV->BCC\n");
                     }
@@ -367,7 +389,7 @@ int llwrite(const unsigned char *buf, int bufSize)
                 }
                 else if (state == BCC_OK)
                 {
-                    if (buf == FLAG)
+                    if (b == FLAG)
                     {
                         state = STOP;
                         printf("ACABOU GG\n");
@@ -391,6 +413,7 @@ int llwrite(const unsigned char *buf, int bufSize)
         {
             return full_size;
         }
+        return -1;
 }
 
 ////////////////////////////////////////////////
@@ -477,17 +500,35 @@ int llread(unsigned char *packet)
             }
             else if (state == DATA) {
                 if (buf == ESCAPE) {
-                    packet[packet_ind] = buf;
-                    packet_ind++;
-                    packet[packet_ind] = 0x5d;
-                    packet_ind++;
+                    state = DATA_ESCPAPE_READ;
                 }
                 else if (buf == FLAG) {
+                    state = DATA_FLAG_READ;
+                }
+                else {
                     packet[packet_ind] = buf;
                     packet_ind++;
-                    packet[packet_ind] = 0x5e;
-                    packet_ind++;
+                }
+            }
+        else if (state == DATA_ESCPAPE_READ) {
+            if (buf == 0x5d) {
+                packet[packet_ind] = ESCAPE;
+                packet_ind++;
+                state = DATA;
+            }
+            else if (buf == 0x5e) {
+                packet[packet_ind] = FLAG;
+                packet_ind++;
+                state = DATA;
+            }
+        }
+        else if (state == DATA_FLAG_READ) {
+                    bcc2 = packet[0];
+                    for (int i = 1; i < packet_ind - 1; i++) {
+                        bcc2 = bcc2 ^ packet[i];
+                    }
                     if (bcc2 == packet[packet_ind - 1]) {
+                        packet[packet_ind] = '\0';
                         unsigned char c = Ns == 1 ? C_INF_1: C_INF_0;
                         state = STOP;
                         sendConnectionFrame(A_RECEIVER, c);
@@ -498,13 +539,7 @@ int llread(unsigned char *packet)
                         sendConnectionFrame(A_RECEIVER, c);
                         return -1;
                     }
-                }
-                else {
-                    bcc2 = (packet_ind == 0) ? packet : bcc2 ^ packet;
-                    packet[packet_ind] = buf;
-                    packet_ind+;
-                }
-            }
+        }
         }
         trys--;
         }
