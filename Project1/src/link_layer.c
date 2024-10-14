@@ -33,9 +33,9 @@
 #define ESCAPE 0x7d
 
 typedef enum {START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, DATA, STOP} message_state; 
-typedef enum {FRAME_ACCEPTED, FRAME_REJECTED} t_state;
+typedef enum {FRAME_ACCEPTED, FRAME_REJECTED, WAITING} t_state;
 message_state state = START;
-t_state transmission_state = FRAME_REJECTED;
+t_state transmission_state = WAITING;
 
 int alarm_cycle = 0;
 int alarm_activated = FALSE;
@@ -43,6 +43,10 @@ int trys = 0;
 int security_time = 0;
 int Ns = 0;
 int Nr = 1;
+
+int iterate_n(int n) {
+    return (n + 1) % 2;
+}
 
 void sendConnectionFrame(unsigned char A_field, unsigned char C_field) {
     unsigned char set_frame[BUF_SIZE] = {FLAG, A_field, C_field, A_field ^ C_field, FLAG};
@@ -268,6 +272,7 @@ int llopen(LinkLayer connectionParameters)
 ////////////////////////////////////////////////
 int llwrite(const unsigned char *buf, int bufSize)
 {
+    transmission_state = WAITING;
     int full_size = I_FRAME_SIZE + bufSize;
     unsigned char i_frame[full_size];
     i_frame[SYNC_BYTE_1] = FLAG;
@@ -282,19 +287,110 @@ int llwrite(const unsigned char *buf, int bufSize)
     }
     i_frame[DATA_PROTECTION_FIELD + bufSize] = BCC2;
     i_frame[SYNC_BYTE_2 + bufSize] = FLAG;
-    while (trys != 0 && transmission_state != FRAME_ACCEPTED)
+    while (trys != 0)
     {
-        alarm(security_time);
-        alarm_activated = FALSE;
-        while (alarm_activated != TRUE && state != STOP)
-        {
             writeBytesSerialPort(i_frame, full_size);
+            alarm(security_time);
+            alarm_activated = FALSE;
+            while (alarm_activated != TRUE && state != STOP)
+            {
+                if(readByteSerialPort(&buf) < 0) perror("Connection error\n");
+                if (state == START)
+                {
+                    if (buf == FLAG)
+                    {
+                        state = FLAG_RCV;
+                        printf("START->FLAG\n");
+                    }
+                    else
+                    {
+                        state = START;
+                        printf("START->START\n");
+                    }
+                }
+                else if (state == FLAG_RCV)
+                {
+                    if (buf == FLAG)
+                    {
+                        state = FLAG_RCV;
+                        printf("FLAG->FLAG\n");
+                    }
+                    else if (buf == A_RECEIVER)
+                    {
+                        state = A_RCV;
+                        printf("FLAG->A_RCV\n");
+                    }
+                    else
+                    {
+                        state = START;
+                        printf("FLAG->START\n");
+                    }
+                }
+                else if (state == A_RCV)
+                {
+                    if (buf == FLAG)
+                    {
+                        state = FLAG_RCV;
+                        printf("A_RCV->FLAG\n");
+                    }
+                    else if (buf == C_UA)
+                    {
+                        state = C_RCV;
+                        printf("A_RCV->C_RCV\n");
+                    }
+                    else
+                    {
+                        state = START;
+                        printf("A_RCV->START\n");
+                    }
+                }
+                else if (state == C_RCV)
+                {
+                    if ((buf == C_REJ_0) || (buf == C_REJ_1) )
+                    {
+                        transmission_state = FRAME_REJECTED;
+                        state = FLAG_RCV;
+                        printf("C_RCV->FLAG\n");
+                    }
+                    else if ((buf == C_INF_0) || (buf == C_INF_1))
+                    {
+                        transmission_state = FRAME_ACCEPTED;
+                        Ns = iterate_n(Ns);
+                        state = BCC_OK;
+                        printf("C_RCV->BCC\n");
+                    }
+                    else
+                    {
+                        state = START;
+                        printf("C_RCV->START\n");
+                    }
+                }
+                else if (state == BCC_OK)
+                {
+                    if (buf == FLAG)
+                    {
+                        state = STOP;
+                        printf("ACABOU GG\n");
+                    }
+                    else
+                    {
+                        state = START;
+                        printf("BCC->START\n");
+                    }
+                }
+            }
+            if ((transmission_state == FRAME_ACCEPTED) || (transmission_state == FRAME_REJECTED)) {
+                break;
+            }
+            trys--;
         }
-        break;
-    }
-    unsigned char ua_frame[BUF_SIZE] = {FLAG, A_SENDER, C_SET, A_SENDER ^ C_SET, FLAG};
-    int bytes = writeBytesSerialPort(ua_frame, BUF_SIZE);
-    return 0;
+        if ((state != STOP) || (transmission_state == FRAME_REJECTED)) {
+            return ERROR_OPENING;
+        }
+        else if (transmission_state == FRAME_ACCEPTED)
+        {
+            return full_size;
+        }
 }
 
 ////////////////////////////////////////////////
@@ -392,7 +488,9 @@ int llread(unsigned char *packet)
                     packet[packet_ind] = 0x5e;
                     packet_ind++;
                     if (bcc2 == packet[packet_ind - 1]) {
+                        unsigned char c = Ns == 1 ? C_INF_1: C_INF_0;
                         state = STOP;
+                        sendConnectionFrame(A_RECEIVER, c);
                         return packet_ind;
                     }
                     else {
