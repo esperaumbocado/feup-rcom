@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "serial_port.h": "c",
-        "definitions.h": "c"
+        "definitions.h": "c",
+        "application_layer.h": "c"
     }
 }
