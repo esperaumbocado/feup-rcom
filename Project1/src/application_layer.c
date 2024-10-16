@@ -12,14 +12,12 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     link_layer_info.nRetransmissions = nTries;
     link_layer_info.timeout = timeout;
     int fd = llopen(link_layer_info);
-    if (fd < 0)
-    {
+    if (fd < 0){
         printf(
             "====================================\n"
             "Error opening link layer connection\n"
             "====================================\n");
-    }else
-    {
+    }else{
         printf(
             "====================================\n"
             "Link layer connection established\n"
@@ -27,4 +25,5 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             "====================================\n",
             fd);
     }
+    
 }
