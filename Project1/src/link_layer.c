@@ -43,6 +43,8 @@ int alarmCount = 0;
 int nRetransmissions = 0;
 int timeout = 0;
 
+int dataValid = 0;
+
 // State machine related definitions
 typedef enum {
     START, // Start state
@@ -50,11 +52,17 @@ typedef enum {
     A_RCV, // Received A
     C_RCV, // Received C
     BCC_OK, // Received BCC
-    STOP // Stop state
+    STOP, // Stop state
+    READING_DATA, // Reading data
+    DATA_ESCAPE_RCV, // Received escape
+    DATA_FLAG_RCV, // Received flag
+    PENDING_DATA, // Pending data
+
 } message_state; 
 
 // State machine related variables
 message_state state = START;
+
 
 // Numeration of data frames
 int Ns = 0;
@@ -100,9 +108,50 @@ int sendUAFrame(){
 
 
 /*
+SEND RR
+*/
+int sendRRFrame(int ns){
+    unsigned char rr[5] = {FLAG, A_TX, ns == 0 ? C_RR0 : C_RR1, BCC1(A_TX, (ns == 0) ? C_RR0 : C_RR1), FLAG};
+    printf(
+        "====================\n"
+        "Sending RR frame\n"
+        "====================\n"
+        );
+    return writeBytesSerialPort(rr, 5);
+}
+
+
+/*
+SEND REJ
+*/
+int sendREJFrame(int ns){
+    unsigned char rej[5] = {FLAG, A_TX, ns == 0 ? C_REJ0 : C_REJ1, BCC1(A_TX, (ns == 0) ? C_REJ0 : C_REJ1), FLAG};
+    printf(
+        "====================\n"
+        "Sending REJ frame\n"
+        "====================\n"
+        );
+    return writeBytesSerialPort(rej, 5);
+}
+
+/*
+SEND DISC
+*/
+int sendDISCFrame(){
+    unsigned char disc[5] = {FLAG, A_RX, C_DISC, BCC1(A_TX, C_DISC), FLAG};
+    printf(
+        "====================\n"
+        "Sending DISC frame\n"
+        "====================\n"
+        );
+    return writeBytesSerialPort(disc, 5);
+}
+
+/*
 TRANSMITTER STATE MACHINE
 */
 void transmitterStateMachine(unsigned char byte){
+    printf("Transmitter state machine\n");
     message_state oldState = state;
 
     switch (state){
@@ -152,6 +201,9 @@ void transmitterStateMachine(unsigned char byte){
 
         case STOP:
             break;
+
+        default:
+            break;
     }
 
     logStateTransition((int)oldState, (int)state);  // Log the transition
@@ -161,10 +213,10 @@ void transmitterStateMachine(unsigned char byte){
 RECEIVER STATE MACHINE
 */
 void receiverStateMachine(unsigned char byte){
+    printf("Receiver state machine\n");
     message_state oldState = state;
 
-    switch (state)
-    {
+    switch (state){
         case START:
             if (byte == FLAG){
                 state = FLAG_RCV;
@@ -211,6 +263,9 @@ void receiverStateMachine(unsigned char byte){
 
         case STOP:
             break;
+
+        default:
+            break;
     }
 
     logStateTransition((int)oldState, (int)state);  // Log the transition
@@ -219,13 +274,14 @@ void receiverStateMachine(unsigned char byte){
 
 /*
 TRANSMITTER DATA STATE MACHINE
-Returns 1 if the data frame is valid
-Returns 0 if the data frame is invalid
+Returns 1 if the STOP state
+Returns 0 otherwise
+dataValid is a pointer to a variable that will be set to 1 if the data is valid
 */
-int dataResponseStateMachine(unsigned char byte){
+void dataResponseStateMachine(unsigned char byte, int* dataValid){
     message_state oldstate = state;
-    int valid = 0;
-
+    printf("Data response state machine\n");
+    
     switch (state)
     {
     case START:
@@ -245,10 +301,10 @@ int dataResponseStateMachine(unsigned char byte){
     case A_RCV:
         if (byte == (Ns == 0 ? C_RR0 : C_RR1)){
             state = C_RCV;
-            valid = 1;
+            *dataValid = 1;
         }else if (byte == (Ns == 0 ? C_REJ0 : C_REJ1)){
             state = C_RCV;
-            valid = 0;
+            *dataValid = 0;
         }else if (byte == FLAG){
             state = FLAG_RCV;
         }else{
@@ -256,8 +312,10 @@ int dataResponseStateMachine(unsigned char byte){
         }
         break;
     case C_RCV:
-        if (byte == BCC1(A_TX, (Ns == 0 ? C_RR0 : C_RR1)) || byte == BCC1(A_TX, (Ns == 0 ? C_REJ0 : C_REJ1))){
+        if (byte == C_RR0 || byte == C_RR1){
             state = BCC_OK;
+        }else if (byte == C_REJ0 || byte == C_REJ1){
+            state = FLAG_RCV;
         }else if (byte == FLAG){
             state = FLAG_RCV;
         }else{
@@ -271,19 +329,108 @@ int dataResponseStateMachine(unsigned char byte){
             state = START;
         }
         break;
-    
     default:
         break;
     }
 
-    if (state == STOP && valid){
-        return 1;
-    }else{
-        return 0;
-    }
-    
     logStateTransition((int)oldstate, (int)state);
 }
+
+
+/*
+Data Read State Machine
+*/
+int dataReadStateMachine(unsigned char byte, unsigned char *packet, int *packetIndex){
+    printf("Data read state machine\n");
+    message_state oldstate = state;
+    int bcc2 = 0;
+
+    switch (state)
+    {
+    case START:
+        if (byte == FLAG){
+            state = FLAG_RCV;
+        }
+        break;
+    case FLAG_RCV:
+        if (byte == A_TX){
+            state = A_RCV;
+        }else if (byte == FLAG){
+            state = FLAG_RCV;
+        }else{
+            state = START;
+        }
+        break;
+    case A_RCV:
+        if (byte == (Ns == 0 ? C_FRAME0 : C_FRAME1)){
+            state = C_RCV;
+        }else if (byte == FLAG){
+            state = FLAG_RCV;
+        }else if (byte == C_DISC){
+            sendDISCFrame();
+            return 0;
+        }else{
+            state = START;
+        }
+        break;
+    case C_RCV:
+        if (byte == BCC1(A_TX, (Nr == 0 ? C_FRAME0 : C_FRAME1))){
+            state = READING_DATA;
+        }else if (byte == FLAG){
+            state = FLAG_RCV;
+        }else{
+            state = START;
+        }
+        break;
+    case READING_DATA:
+        if (byte == ESCAPE){
+            state = DATA_ESCAPE_RCV;
+        }else if (byte == FLAG){
+            state = DATA_FLAG_RCV;
+        }else{
+            packet[*packetIndex] = byte;
+            (*packetIndex)++;
+        }
+        break;
+    case DATA_ESCAPE_RCV:
+        if (byte == 0x5E){
+            packet[*packetIndex] = FLAG;
+            (*packetIndex)++;
+            state = READING_DATA;
+        }else if (byte == 0x5D){
+            packet[*packetIndex] = ESCAPE;
+            (*packetIndex)++;
+            state = READING_DATA;
+        }
+        break;
+    case DATA_FLAG_RCV:
+        
+        for (int i = 0; i < *packetIndex; i++){
+            bcc2 ^= packet[i];
+        }
+
+        if (bcc2 == packet[*packetIndex]){
+            state = STOP;
+            if (sendRRFrame(Nr) <= 0){
+                return -1;
+            }
+            Nr = (Nr + 1) % 2;
+        }else{
+            if (sendREJFrame(Nr)<= 0){
+                return -1;
+            }
+            Nr = (Nr + 1) % 2;
+        }
+        break;
+    default:
+        break;
+    }
+
+    logStateTransition((int)oldstate, (int)state);
+
+    return 0;
+}
+
 
 ////////////////////////////////////////////////
 // LLOPEN
@@ -317,12 +464,12 @@ int llopen(LinkLayer connectionParameters){
                 // Wait for a response or timeout
                 while (!alarmEnabled){
                     if (readByteSerialPort(&byte) > 0){
-                        transmitterStateMachine(byte);  
+                        transmitterStateMachine(byte); 
+                    }
 
-                        if (state == STOP) {
-                            alarm(0);
-                            return 1;
-                        }
+                    if (state == STOP){
+                        alarm(0);
+                        return 0;
                     }
                 }
 
@@ -345,13 +492,9 @@ int llopen(LinkLayer connectionParameters){
             while (state != STOP){
                 if (readByteSerialPort(&byte) > 0){
                     receiverStateMachine(byte);
-
-                    if (state == STOP){
-                        sendUAFrame();
-                        return 1;
-                    }
                 }
             }
+            sendUAFrame();
             break;
     }
 
@@ -369,7 +512,6 @@ int llwrite(const unsigned char *buf, int bufSize){
     int dataValid = 0;
 
     // Construction of the information frame
-
     int frameSize = bufSize + 6;
     unsigned char *i_frame = (unsigned char *)malloc(frameSize);
     i_frame[0] = FLAG;
@@ -402,8 +544,7 @@ int llwrite(const unsigned char *buf, int bufSize){
 
     int retranmissionsLeft = nRetransmissions;
 
-    while (retranmissionsLeft > 0)
-    {
+    while (retranmissionsLeft > 0){
         if (writeBytesSerialPort(i_frame, frameSize) <= 0){
             printf("Error writing to serial port\n");
             return -1;
@@ -412,39 +553,45 @@ int llwrite(const unsigned char *buf, int bufSize){
         alarm(timeout);
         alarmEnabled = FALSE;
 
-        state = START;
+        unsigned char byte;
 
         printf ("====================\n"
                 "Sent information frame\n"
                 "====================\n");
         
-        unsigned char byte;
-
+        
+        // Resetting state machine
         state = START;
+        dataValid = 0;
 
         
-
         //Waiting for response
         while (!alarmEnabled){
                     if (readByteSerialPort(&byte) > 0){
-                        dataResponseStateMachine(byte);  
-
-                        if (state == STOP) {
-                            alarm(0);
-                            return 1;
-                        }
+                        dataResponseStateMachine(byte,&dataValid);
                     }
 
-                    if (dataValid){
-                        Ns = (Ns + 1) % 2;
+                    if (state == STOP){
+                        alarm(0);
                         break;
                     }
+        }
 
-                    if (alarmEnabled){
-                        alarmEnabled = FALSE; 
-                        retranmissionsLeft--;  
-                        printf("Retransmission #%d\n", nRetransmissions - retranmissionsLeft);
-                    }
+        if (state == STOP && dataValid) {
+            free(i_frame);
+            Ns = (Ns + 1) % 2;
+            printf("Receiver responded to the data as valid\n");
+            return frameSize;
+        }else if (state == STOP && !dataValid){
+            free(i_frame);
+            printf("Receiver responded to the data as invalid\n");
+            return 0;
+        }
+
+        if (alarmEnabled){
+            alarmEnabled = FALSE; 
+            retranmissionsLeft--;  
+            printf("Retransmission #%d\n", nRetransmissions - retranmissionsLeft);
         }
 
         if (retranmissionsLeft == 0){
@@ -453,10 +600,6 @@ int llwrite(const unsigned char *buf, int bufSize){
         }
     }
     
-    free(i_frame);
-    if (dataValid){
-        return frameSize;
-    }
     return 0;
 }
 
@@ -465,8 +608,18 @@ int llwrite(const unsigned char *buf, int bufSize){
 // LLREAD
 ////////////////////////////////////////////////
 int llread(unsigned char *packet){
-    // TODO
+   
+    unsigned char byte;
+    int packetIndex = 0;
+    state = START;
 
+    while (state != STOP){
+        if (readByteSerialPort(&byte) > 0){
+            dataReadStateMachine(byte, packet, &packetIndex);
+        }
+    }
+    
+    
     return 0;
 }
 
