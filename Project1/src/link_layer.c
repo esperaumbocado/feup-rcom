@@ -53,8 +53,26 @@ typedef enum {
     STOP // Stop state
 } message_state; 
 
+typedef enum {
+    D_START, // Start state
+    D_FLAG_RCV, // Received flag
+    D_A_RCV, // Received A
+    D_C_RCV, // Received C
+    DATA_ESCPAPE_READ, // Read escape in data
+    DATA_FLAG_READ, // Read flag in data
+    DATA, // Its reading data
+    D_STOP // Stop state
+} data_packet_state; 
+
+typedef enum {
+    PACKET_REJECTED, // Packet was rejected
+    PACKET_ACCEPTED, // Packet was accepted
+    READING_PACKET, // Packet is beign read
+} data_tranfer_state;
+
 // State machine related variables
 message_state state = START;
+data_packet_state d_state = D_START;
 
 // Numeration of data frames
 int Ns = 0;
@@ -98,6 +116,15 @@ int sendUAFrame(){
     return writeBytesSerialPort(ua, 5);
 }
 
+int sendConnectionFrame(unsigned char A, unsigned char C) {
+    unsigned char ua[5] = {FLAG, A, C, BCC1(A, C), FLAG};
+    printf(
+        "====================\n"
+        "Sending Connection frame\n"
+        "====================\n"
+        );
+    return writeBytesSerialPort(ua, 5);
+}
 
 /*
 TRANSMITTER STATE MACHINE
@@ -285,6 +312,85 @@ int dataResponseStateMachine(unsigned char byte){
     logStateTransition((int)oldstate, (int)state);
 }
 
+void dataStateMachine(unsigned char byte){
+    message_state oldstate = d_state;
+    switch(d_state)
+    {
+        case D_START:
+            if (byte == FLAG)
+            {
+                d_state = FLAG_RCV;
+            }
+            else
+            {
+                d_state = D_START;
+            }
+            break;
+        case D_FLAG_RCV:
+            if (byte == FLAG)
+            {
+                d_state = D_FLAG_RCV;
+            }
+            else if (byte == A_TX)
+            {
+                d_state = D_A_RCV;
+            }
+            else
+            {
+                d_state = D_START;
+            }
+            break;
+        case D_A_RCV:
+            if (byte == FLAG)
+            {
+                d_state = D_FLAG_RCV;
+            }
+            else if (byte == (Ns == 0 ? C_FRAME0: C_FRAME1))
+            {
+                d_state = D_C_RCV;
+            }
+            else
+            {
+                d_state = START;
+            }
+            break;
+        case D_C_RCV:
+            if (byte == FLAG)
+            {
+                d_state = D_FLAG_RCV;
+            }
+            else if (byte == BCC1(A_TX, (Ns == 0 ? C_FRAME0: C_FRAME1)))
+            {
+                d_state = DATA;
+            }
+            else
+            {
+                d_state = D_START;
+            }
+            break;
+        case DATA:
+            if (byte == ESCAPE) {
+                d_state = DATA_ESCPAPE_READ;
+            }
+            else if (byte == FLAG) {
+                d_state = DATA_FLAG_READ;
+            }
+            else {
+                d_state = DATA;
+            }
+            break;
+        case DATA_ESCPAPE_READ:
+            d_state = DATA;
+            break;
+        case DATA_FLAG_READ: 
+            d_state = D_STOP;
+            break;
+        case D_STOP:
+            break;
+    }
+    logStateTransition((int)oldstate, (int)d_state);
+}
+
 ////////////////////////////////////////////////
 // LLOPEN
 ////////////////////////////////////////////////
@@ -341,7 +447,6 @@ int llopen(LinkLayer connectionParameters){
 
 
         case LlRx:
-
             while (state != STOP){
                 if (readByteSerialPort(&byte) > 0){
                     receiverStateMachine(byte);
@@ -364,7 +469,7 @@ LLWRITE
 If the frame is sent successfully, returns the number of bytes written
 If the frame is not sent, returns 0
 */
-int llwrite(const unsigned char *buf, int bufSize){
+int llwrite(const unsigned char *byte, int bufSize){
     
     int dataValid = 0;
 
@@ -377,23 +482,24 @@ int llwrite(const unsigned char *buf, int bufSize){
     i_frame[2] = (Ns == 0) ? C_FRAME0 : C_FRAME1;
     i_frame[3] = BCC1(A_TX, i_frame[2]);
     for (int i = 0; i < bufSize; i++){
-        i_frame[i + 4] = buf[i];
+        i_frame[i + 4] = byte[i];
     }
     
     unsigned char BCC2 = 0;
     for (int i = 0; i < bufSize; i++){
-        BCC2 ^= buf[i];
+        BCC2 ^= byte[i];
     }
     
+    // Stuffing the frame
     for (int cur_byte = 0; cur_byte < bufSize; cur_byte++){
-        if (buf[cur_byte] == FLAG || buf[cur_byte] == ESCAPE){
+        if (byte[cur_byte] == FLAG || byte[cur_byte] == ESCAPE){
             frameSize++;
             i_frame = (unsigned char *)realloc(i_frame, frameSize);
             i_frame[4 + cur_byte] = ESCAPE;
             cur_byte++;
-            i_frame[4 + cur_byte] = buf[cur_byte] ^ 0x20;
+            i_frame[4 + cur_byte] = byte[cur_byte - 1] ^ 0x20;
         }else{
-            i_frame[4 + cur_byte] = buf[cur_byte];
+            i_frame[4 + cur_byte] = byte[cur_byte];
         }
     }
 
@@ -428,19 +534,15 @@ int llwrite(const unsigned char *buf, int bufSize){
         while (!alarmEnabled){
                     if (readByteSerialPort(&byte) > 0){
                         dataResponseStateMachine(byte);  
-
+                        Ns = (Ns + 1) % 2;
                         if (state == STOP) {
                             alarm(0);
                             return 1;
                         }
                     }
 
-                    if (dataValid){
-                        Ns = (Ns + 1) % 2;
-                        break;
-                    }
-
                     if (alarmEnabled){
+                        alarm(timeout);
                         alarmEnabled = FALSE; 
                         retranmissionsLeft--;  
                         printf("Retransmission #%d\n", nRetransmissions - retranmissionsLeft);
@@ -464,12 +566,49 @@ int llwrite(const unsigned char *buf, int bufSize){
 ////////////////////////////////////////////////
 // LLREAD
 ////////////////////////////////////////////////
-int llread(unsigned char *packet){
-    // TODO
-
+int llread(unsigned char *packet)
+{
+    unsigned char buf;
+    int packet_ind = 0;
+    unsigned char bcc2;
+    while (d_state != D_STOP)
+    {
+        if (readByteSerialPort(&buf) == 1) {
+            printf("byte = 0x%02X\n", buf);
+            dataStateMachine(buf);
+            if (d_state == DATA_FLAG_READ) {
+                bcc2 = packet[0];
+                for (int i = 1; i < packet_ind - 1; i++) {
+                    bcc2 = bcc2 ^ packet[i];
+                }
+                if (bcc2 == packet[packet_ind - 1]) {
+                    packet[packet_ind] = '\0';
+                    unsigned char c = Ns == 1 ? C_RR1: C_RR0;
+                    sendConnectionFrame(A_RX, c);
+                    return packet_ind;
+                }
+                else {
+                    unsigned char c = Ns == 1 ? C_REJ1: C_REJ0;
+                    sendConnectionFrame(A_RX, c);
+                    return -1;
+                }
+            }
+            else if (d_state == DATA_ESCPAPE_READ) {
+                if (buf == 0x5d) {
+                    packet[packet_ind - 1] = ESCAPE;
+                }
+                else if (buf == 0x5e) {
+                    packet[packet_ind - 1] = FLAG;
+                }
+            }
+            else {
+                packet[packet_ind] = buf;
+                packet_ind++;
+            }
+        }
+    }
     return 0;
 }
-
 ////////////////////////////////////////////////
 // LLCLOSE
 ////////////////////////////////////////////////
