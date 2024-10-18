@@ -42,6 +42,7 @@ int alarmCount = 0;
 // Retransmission related
 int nRetransmissions = 0;
 int timeout = 0;
+LinkLayerRole role;
 
 int dataValid = 0;
 
@@ -138,7 +139,7 @@ int sendREJFrame(int ns){
 SEND DISC
 */
 int sendDISCFrame(){
-    unsigned char disc[5] = {FLAG, A_RX, C_DISC, BCC1(A_TX, C_DISC), FLAG};
+    unsigned char disc[5] = {FLAG, A_TX, C_DISC, BCC1(A_TX, C_DISC), FLAG};
     printf(
         "====================\n"
         "Sending DISC frame\n"
@@ -432,6 +433,68 @@ int dataReadStateMachine(unsigned char byte, unsigned char *packet, int *packetI
 }
 
 
+/*
+CLOSE STATE MACHINE
+*/
+void closeStateMachine(unsigned char byte,LinkLayerRole role){
+    printf("Close state machine\n");
+    message_state oldstate = state;
+
+    switch (state)
+    {
+    case START:
+        if (byte == FLAG){
+            state = FLAG_RCV;
+        }
+        break;
+    case FLAG_RCV:
+        if (byte == A_TX && role == LlRx){
+            state = A_RCV;
+        }else if (byte == A_TX && role == LlTx){
+            state = A_RCV;
+        }else if (byte == FLAG){
+            state = FLAG_RCV;
+        }else{
+            state = START;
+        }
+        break;
+    case A_RCV:
+        if (byte == C_DISC){
+            state = C_RCV;
+        }else if (byte == FLAG){
+            state = FLAG_RCV;
+        }else{
+            state = START;
+        }
+        break;
+    case C_RCV:
+        if (byte == BCC1(A_TX, C_DISC) && role == LlRx){
+            state = BCC_OK;
+        }else if (byte == BCC1(A_TX, C_DISC) && role == LlTx){
+            state = BCC_OK;
+        }else if (byte == FLAG){
+            state = FLAG_RCV;
+        }else{
+            state = START;
+        }
+        break;
+    case BCC_OK:
+        if (byte == FLAG){
+            state = STOP;
+        }else{
+            state = START;
+        }
+        break;
+    case STOP:
+        break;
+    default:
+        break;
+    }
+
+    logStateTransition((int)oldstate, (int)state);
+}
+
+
 ////////////////////////////////////////////////
 // LLOPEN
 ////////////////////////////////////////////////
@@ -443,6 +506,7 @@ int llopen(LinkLayer connectionParameters){
 
     nRetransmissions = connectionParameters.nRetransmissions;
     timeout = connectionParameters.timeout;
+    role = connectionParameters.role;
 
     signal(SIGALRM, handle_alarm);
     int retransmissionsLeft = nRetransmissions;
@@ -451,6 +515,7 @@ int llopen(LinkLayer connectionParameters){
 
     switch(connectionParameters.role){
         case LlTx:
+            alarmCount = 0;
             while (retransmissionsLeft > 0){
                 if (sendSetFrame() <= 0) {  // Send SET frame
                     return -1;
@@ -544,6 +609,8 @@ int llwrite(const unsigned char *buf, int bufSize){
 
     int retranmissionsLeft = nRetransmissions;
 
+    alarmCount = 0;
+
     while (retranmissionsLeft > 0){
         if (writeBytesSerialPort(i_frame, frameSize) <= 0){
             printf("Error writing to serial port\n");
@@ -627,7 +694,103 @@ int llread(unsigned char *packet){
 // LLCLOSE
 ////////////////////////////////////////////////
 int llclose(int showStatistics){
-    // TODO
+
+    switch(role){
+        case LlTx:
+
+            int retransmissionsLeft = nRetransmissions;
+
+            alarmCount = 0;
+
+            // Try to send DISC frame with alarm until getting another DISC frame
+            while (retransmissionsLeft > 0){
+                if (sendDISCFrame() <= 0){
+                    return -1;
+                }
+
+                alarm(timeout);
+                alarmEnabled = FALSE;
+                state = START;
+
+                while (!alarmEnabled){
+                    unsigned char byte;
+                    if (readByteSerialPort(&byte) > 0){
+                        closeStateMachine(byte, role);
+                    }
+
+                    if (state == STOP){
+                        sendUAFrame();
+                        alarm(0);
+                        return 0;
+                    }
+                }
+
+                if (alarmEnabled){
+                    alarmEnabled = FALSE;
+                    retransmissionsLeft--;
+                    printf("Retransmission #%d\n", nRetransmissions - retransmissionsLeft);
+                }
+            }
+
+            if (retransmissionsLeft == 0){
+                printf("Max retransmissions reached, giving up.\n");
+                return -1;
+            }
+            
+            break;
+        case LlRx:
+            unsigned char byte;
+            // Wait for DISC frame, send DISC frame, wait for UA frame
+            state = START;
+            
+            while (state != STOP){
+                if (readByteSerialPort(&byte) > 0){
+                    closeStateMachine(byte, role);
+                }
+            }
+
+            if (state == STOP){
+                // Try to send UA frame with alarm until getting a UA frame
+                int retransmissionsLeft = nRetransmissions;
+
+                alarmCount = 0;
+
+                while (retransmissionsLeft > 0){
+                    if (sendDISCFrame() <= 0){
+                        return -1;
+                    }
+
+
+                    alarm(timeout);
+                    alarmEnabled = FALSE;
+                    state = START;
+
+                    while (!alarmEnabled){
+                        if (readByteSerialPort(&byte) > 0){
+                            transmitterStateMachine(byte);
+                        }
+
+                        if (state == STOP){
+                            alarm(0);
+                            return 0;
+                        }
+                    }
+
+                    if (alarmEnabled){
+                        alarmEnabled = FALSE;
+                        retransmissionsLeft--;
+                        printf("Retransmission #%d\n", nRetransmissions - retransmissionsLeft);
+                    }
+                }
+
+                if (retransmissionsLeft == 0){
+                    printf("Max retransmissions reached, giving up.\n");
+                    return -1;
+                }
+            }
+
+            break;
+    }
 
     int clstat = closeSerialPort();
     return clstat;
