@@ -520,7 +520,7 @@ int llopen(LinkLayer connectionParameters){
                 if (sendSetFrame() <= 0) {  // Send SET frame
                     return -1;
                 }
-
+                
                 alarm(timeout);
 
                 alarmEnabled = FALSE;
@@ -682,12 +682,13 @@ int llread(unsigned char *packet){
 
     while (state != STOP){
         if (readByteSerialPort(&byte) > 0){
-            dataReadStateMachine(byte, packet, &packetIndex);
+            int status = dataReadStateMachine(byte, packet, &packetIndex);
+            if (status > 0) return packetIndex;
+            if (status == -1) return -1;
         }
     }
     
-    
-    return 0;
+    return -1;
 }
 
 ////////////////////////////////////////////////
