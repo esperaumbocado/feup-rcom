@@ -39,6 +39,7 @@
 int alarmEnabled = FALSE;
 int alarmCount = 0;
 
+
 // Retransmission related
 int nRetransmissions = 0;
 int timeout = 0;
@@ -74,6 +75,7 @@ typedef enum {
 message_state state = START;
 data_packet_state d_state = D_START;
 
+
 // Numeration of data frames
 int Ns = 0;
 int Nr = 0;
@@ -101,6 +103,7 @@ int sendSetFrame(){
         "Sending SET frame\n"
         "====================\n");
     return writeBytesSerialPort(set, 5);
+
 }
 
 /*
