@@ -100,7 +100,7 @@ int main(int argc, char *argv[])
 
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
-    newtio.c_cc[VTIME] = 30; // Inter-character timer unused
+    newtio.c_cc[VTIME] = 5; // Inter-character timer unused
     newtio.c_cc[VMIN] = 5;  // Blocking read until 5 chars received
 
     // VTIME e VMIN should be changed in order to protect with a
@@ -134,6 +134,8 @@ int main(int argc, char *argv[])
     
     while (STOP == FALSE)
     {
+        printf("Im here\n");
+
         if (alarmCount > 2)
         {
             printf("Alarm count exceeded\n");
