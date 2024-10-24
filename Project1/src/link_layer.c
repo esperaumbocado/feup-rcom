@@ -396,8 +396,10 @@ int dataReadStateMachine(unsigned char byte, unsigned char *packet, int *packetI
                 if (sendRRFrame(Nr) <= 0){
                     return -1;
                 }
-                packet[*packetIndex - 1] = '\0';
+                *packetIndex = *packetIndex - 1;
+                packet[*packetIndex] = '\0';
                 Nr = (Nr + 1) % 2;
+                printf("index = %i \n", *packetIndex);
             }else{
                 if (sendREJFrame(Nr)<= 0){
                     return -1;
@@ -407,6 +409,9 @@ int dataReadStateMachine(unsigned char byte, unsigned char *packet, int *packetI
         else{
             packet[*packetIndex] = byte;
             (*packetIndex)++;
+            printf("byte = %c \n", byte);
+            printf("index = %i \n", *packetIndex);
+
         }
         break;
     case DATA_ESCAPE_RCV:
@@ -682,16 +687,15 @@ int llread(unsigned char *packet){
     unsigned char byte;
     int packetIndex = 0;
     state = START;
+    int status = -1;
 
     while (state != STOP){
         if (readByteSerialPort(&byte) > 0){
             printf("byte = 0x%02X\n", byte);
-            int status = dataReadStateMachine(byte, packet, &packetIndex);
-            if (status > 0) return packetIndex;
-            if (status == -1) return -1;
+            status = dataReadStateMachine(byte, packet, &packetIndex);
         }
     }
-    
+    if (status >= 0) return packetIndex;
     return -1;
 }
 
