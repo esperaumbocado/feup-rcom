@@ -402,7 +402,6 @@ int dataReadStateMachine(unsigned char byte, unsigned char *packet, int *packetI
                 if (sendREJFrame(Nr)<= 0){
                     return -1;
                 }
-
             }
             }
         else{
@@ -591,15 +590,18 @@ int llwrite(const unsigned char *buf, int bufSize){
         BCC2 ^= buf[i];
     }
     
+    int i = 0;
     for (int cur_byte = 0; cur_byte < bufSize; cur_byte++){
         if (buf[cur_byte] == FLAG || buf[cur_byte] == ESCAPE){
             frameSize++;
             i_frame = (unsigned char *)realloc(i_frame, frameSize);
-            i_frame[4 + cur_byte] = ESCAPE;
-            cur_byte++;
-            i_frame[4 + cur_byte] = buf[cur_byte] ^ 0x20;
+            i_frame[4 + i] = ESCAPE;
+            i++;
+            i_frame[4 + i] = buf[i-1] ^ 0x20;
+            i++;
         }else{
-            i_frame[4 + cur_byte] = buf[cur_byte];
+            i_frame[4 + i] = buf[i];
+            i++;
         }
     }
 
@@ -651,7 +653,7 @@ int llwrite(const unsigned char *buf, int bufSize){
         }else if (state == STOP && !dataValid){
             free(i_frame);
             printf("Receiver responded to the data as invalid\n");
-            return 0;
+            break;
         }
 
         if (alarmEnabled){
