@@ -1,7 +1,7 @@
 // Application layer protocol implementation
 
 #include "application_layer.h"
-#include "math.h"
+#include <math.h>
 
 #define CONTROL_FIELD_DATA 2
 #define CONTROL_FIELD_START 1
@@ -10,6 +10,11 @@
 #define TYPE_FILE_NAME 1
 
 #define MAX_PACKET_SIZE 1024
+
+
+unsigned char* buildControlPacket(int control_field, int L1, int length, int L2, const char* filename);
+unsigned char* buildDataPacket(unsigned char sequence_number, unsigned char* packet_data, int data_size);
+
 
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
@@ -42,11 +47,11 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             struct stat st;
             stat(filename, &st);
             file_size = st.st_size;
-            int L1 = (int) ceil(log2f((float)fileSize)/8.0);
+            int L1 = (int) ceil(log2f((float)file_size)/8.0);
             int L2 = strlen(filename);
-            unsigned char control_packet_start = buildControlPacket(CONTROL_FIELD_START, L1, file_size, L2, filename);
+            unsigned char* control_packet_start = buildControlPacket(CONTROL_FIELD_START, L1, file_size, L2, filename);
             int bufSize = 5 + L1 + L2;
-            if (llwrite(control_packet_start, bufSize) == -1) {
+            if (llwrite((const unsigned char*)control_packet_start, bufSize) == -1) {
                 printf("Error starting\n");
                 exit(-1);
             }
@@ -60,16 +65,16 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 bytes_left = bytes_left - data_size;
                 sequence = (sequence + 1) % 99;
             }
-            unsigned char control_packet_end = buildControlPacket(CONTROL_FIELD_END, L1, file_size, L2, filename);
-            if (llwrite(control_packet_end, bufSize) == -1) {
+            unsigned char * control_packet_end = buildControlPacket(CONTROL_FIELD_END, L1, file_size, L2, filename);
+            if (llwrite((const unsigned char*)control_packet_end, bufSize) == -1) {
                 printf("Error starting\n");
                 exit(-1);
             }
-            llclose();
+            llclose(sequence);
             break;
 
         case LlRx:
-            unsigned char packet = malloc(MAX_PACKET_SIZE);
+            unsigned char * packet = (unsigned char *) malloc(MAX_PACKET_SIZE);
             llread(packet);
             int bytes_recieved = 0;
             unsigned char size_legth_bytes = packet[2];
@@ -80,13 +85,13 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             unsigned char fileNameNBytes = packet[3+size_legth_bytes+1];
             unsigned char *new_file_name = (unsigned char*)malloc(fileNameNBytes);
             memcpy(new_file_name, packet+3+size_legth_bytes+2, fileNameNBytes);
-            FILE* reciever_file = fopen(new_file_name, "wb+");
+            FILE* reciever_file = fopen((const char*)new_file_name, "wb+");
             while(bytes_recieved < new_file_size) {
                 int packet_recived_size = llread(packet);
                 bytes_recieved += MAX_PACKET_SIZE;
-                fwrite(packet,sizeof(unsigned char), packet_recived_size - 4, new_file_size);
+                fwrite(packet, sizeof(unsigned char), packet_recived_size - 4, reciever_file);
             }
-            fclose(new_file_name);
+            fclose(reciever_file);
             break;
     }
     
@@ -108,18 +113,18 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 }
 
 // Build the data packet to be sent
-unsigned char buildDataPacket(unsigned char sequence_number, unsigned char packet_data, int data_size) { 
+unsigned char* buildDataPacket(unsigned char sequence_number, unsigned char* packet_data, int data_size) { 
     unsigned char* packet = (unsigned char*) malloc(4 + data_size);
     packet[0] = CONTROL_FIELD_DATA;
     packet[1] = sequence_number;
     packet[2] = (data_size >> 8) && 0xFF, 
     packet[3] = data_size && 0xFF;
-    memccpy(packet+4, packet_data, data_size);
+    memcpy(packet+4, packet_data, data_size);
     return packet;
 }
 
 //Build the control packet
-unsigned char buildControlPacket(int control_field, int L1, int length, int L2, char* filename) {
+unsigned char* buildControlPacket(int control_field, int L1, int length, int L2, const char* filename) {
     int ind = 0;
     unsigned char* packet = (unsigned char*) malloc(5 + L1 + L2);
     packet[ind] = control_field;
@@ -128,7 +133,7 @@ unsigned char buildControlPacket(int control_field, int L1, int length, int L2, 
     ind++;
     packet[ind] = L1;
     ind++;
-    for(int i = 0; i < L1, i++) {
+    for(int i = 0; i < L1; i++) {
         packet[ind] = (length >> 8 * (L1 - i - 1)) && 0xFF;
         ind++;
     }
@@ -136,9 +141,10 @@ unsigned char buildControlPacket(int control_field, int L1, int length, int L2, 
     ind++;
     packet[ind] = L2;
     ind++;
-    for(int i = 0; i < L2, i++) {
-        packet[ind] = (filename >> 8 * (L2 - i - 1)) && 0xFF;
+    for(int i = 0; i < L2; i++) {
+        packet[ind] = filename[i];
         ind++;
     }
     return packet;
 }
+
