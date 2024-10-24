@@ -394,7 +394,7 @@ int dataReadStateMachine(unsigned char byte, unsigned char *packet, int *packetI
             if (bcc2 == packet[*packetIndex - 1]){
                 state = STOP;
                 if (sendRRFrame(Nr) <= 0){
-                    return -1;
+                    return 0;
                 }
                 packet[*packetIndex - 1] = '\0';
                 Nr = (Nr + 1) % 2;

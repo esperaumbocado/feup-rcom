@@ -9,7 +9,7 @@
 #define TYPE_FILE_SIZE 0
 #define TYPE_FILE_NAME 1
 
-#define MAX_PACKET_SIZE 1024
+#define MAX_PACKET_SIZE 1000
 
 char num_bits(int n){
     char k = 0;
@@ -106,12 +106,15 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             printf("new file size %d \n", new_file_size);
             
             FILE* reciever_file = fopen((const char*)filename, "wb+");
+            int num = 1;
             while(packet[0] != CONTROL_FIELD_END) {
+                printf("PACKER NUMBER %d \n", num);
                 int packet_recived_size = llread(packet);
                 printf("packet recieved size %d \n", packet_recived_size);
-                bytes_recieved += MAX_PACKET_SIZE;
+                bytes_recieved += packet_recived_size - 4;
                 fwrite(packet, sizeof(unsigned char), packet_recived_size - 4, reciever_file);
                 printf("bytes recieved %d \n", bytes_recieved);
+                num++;
             }
             fclose(reciever_file);
             printf("close reciever \n");
