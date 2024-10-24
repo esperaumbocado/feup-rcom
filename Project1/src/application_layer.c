@@ -11,6 +11,14 @@
 
 #define MAX_PACKET_SIZE 1024
 
+char num_bits(int n){
+    char k = 0;
+    while(n){
+        n >>= 1;
+        k++;
+    }
+    return k;
+}
 
 unsigned char* buildControlPacket(int control_field, int L1, int length, int L2, const char* filename);
 unsigned char* buildDataPacket(unsigned char sequence_number, unsigned char* packet_data, int data_size);
@@ -49,7 +57,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             printf("filename %s \n", filename);
             file_size = st.st_size;
             printf("file size %li \n", file_size);
-            int L1 = file_size/8.0  ;
+            int L1 = num_bits(file_size)/8 + 1;
             int L2 = strlen(filename);
             unsigned char* control_packet_start = buildControlPacket(CONTROL_FIELD_START, L1, file_size, L2, filename);
             int bufSize = 5 + L1 + L2;
@@ -65,7 +73,14 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 unsigned char* data_to_send = (unsigned char*)malloc(sizeof(unsigned char) * data_size);
                 fread(data_to_send, sizeof(unsigned char), data_size, tx_file);
                 unsigned char* data_packet = buildDataPacket(sequence, data_to_send, data_size);
-                llwrite(data_packet, data_size + 4);
+                if(llwrite(data_packet, data_size + 4)==-1){
+                    printf("===========================\n"
+                           "Error sending data packet\n"
+                           "STOPPING TRANSMISSION\n"
+                           "===========================\n");
+    
+                    exit(-1);
+                }
                 bytes_left = bytes_left - data_size;
                 sequence = (sequence + 1) % 99;
             }
@@ -84,17 +99,19 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             int bytes_recieved = 0;
             unsigned char size_legth_bytes = packet[2];
             unsigned char new_file_size = 0;
+            printf("Size length bytes %d \n", size_legth_bytes);
             for(int i = 0; i < size_legth_bytes; i++) {
                 new_file_size |= packet[3 + i] << (size_legth_bytes - i - 1) * 8;
             }
-            unsigned char fileNameNBytes = packet[3+size_legth_bytes+1];
-            unsigned char *new_file_name = (unsigned char*)malloc(fileNameNBytes);
-            memcpy(new_file_name, packet+3+size_legth_bytes+2, fileNameNBytes);
-            FILE* reciever_file = fopen((const char*)new_file_name, "wb+");
+            printf("new file size %d \n", new_file_size);
+            
+            FILE* reciever_file = fopen((const char*)filename, "wb+");
             while(packet[0] != CONTROL_FIELD_END) {
                 int packet_recived_size = llread(packet);
+                printf("packet recieved size %d \n", packet_recived_size);
                 bytes_recieved += MAX_PACKET_SIZE;
                 fwrite(packet, sizeof(unsigned char), packet_recived_size - 4, reciever_file);
+                printf("bytes recieved %d \n", bytes_recieved);
             }
             fclose(reciever_file);
             printf("close reciever \n");
