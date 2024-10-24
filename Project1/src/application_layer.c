@@ -46,7 +46,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             int sequence = 0;
             struct stat st;
             stat(filename, &st);
+            printf("filename %s \n", filename);
             file_size = st.st_size;
+            printf("file size %li \n", file_size);
             int L1 = file_size/8.0  ;
             int L2 = strlen(filename);
             unsigned char* control_packet_start = buildControlPacket(CONTROL_FIELD_START, L1, file_size, L2, filename);
@@ -57,6 +59,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 exit(-1);
             }
             long bytes_left = file_size;
+            printf("control established \n");
             while (bytes_left != 0) {
                 long data_size = bytes_left > MAX_PACKET_SIZE ? MAX_PACKET_SIZE : bytes_left;
                 unsigned char* data_to_send = (unsigned char*)malloc(sizeof(unsigned char) * data_size);
@@ -66,12 +69,13 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 bytes_left = bytes_left - data_size;
                 sequence = (sequence + 1) % 99;
             }
+            printf("file sent \n");
             unsigned char * control_packet_end = buildControlPacket(CONTROL_FIELD_END, L1, file_size, L2, filename);
             if (llwrite((const unsigned char*)control_packet_end, bufSize) == -1) {
                 printf("Error starting\n");
                 exit(-1);
             }
-            llclose(sequence);
+            printf("close \n");
             break;
 
         case LlRx:
@@ -87,17 +91,18 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             unsigned char *new_file_name = (unsigned char*)malloc(fileNameNBytes);
             memcpy(new_file_name, packet+3+size_legth_bytes+2, fileNameNBytes);
             FILE* reciever_file = fopen((const char*)new_file_name, "wb+");
-            while(bytes_recieved < new_file_size) {
+            while(packet[0] != CONTROL_FIELD_END) {
                 int packet_recived_size = llread(packet);
                 bytes_recieved += MAX_PACKET_SIZE;
                 fwrite(packet, sizeof(unsigned char), packet_recived_size - 4, reciever_file);
             }
             fclose(reciever_file);
+            printf("close reciever \n");
             break;
     }
-    
-
+    llclose(0);
     // Create a buffer and test sending it
+    /*
     if (link_layer_info.role == LlTx){
         unsigned char buf[5] = {0x01, 0x02, 0x03, 0x04, 0x05};
         int bufSize = 5;
@@ -111,6 +116,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     }
 
     llclose(0);
+    */
 }
 
 // Build the data packet to be sent

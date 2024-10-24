@@ -344,6 +344,7 @@ int dataReadStateMachine(unsigned char byte, unsigned char *packet, int *packetI
     printf("Data read state machine\n");
     message_state oldstate = state;
     int bcc2 = 0;
+    printf("Nr = %i \n", Nr);
 
     switch (state)
     {
@@ -362,7 +363,7 @@ int dataReadStateMachine(unsigned char byte, unsigned char *packet, int *packetI
         }
         break;
     case A_RCV:
-        if (byte == (Ns == 0 ? C_FRAME0 : C_FRAME1)){
+        if (byte == (Nr == 0 ? C_FRAME0 : C_FRAME1)){
             state = C_RCV;
         }else if (byte == FLAG){
             state = FLAG_RCV;
@@ -386,11 +387,11 @@ int dataReadStateMachine(unsigned char byte, unsigned char *packet, int *packetI
         if (byte == ESCAPE){
             state = DATA_ESCAPE_RCV;
         }else if (byte == FLAG){
-            for (int i = 0; i < *packetIndex; i++){
+            for (int i = 0; i < *packetIndex - 1; i++){
                 bcc2 ^= packet[i];
             }
 
-            if (bcc2 == packet[*packetIndex]){
+            if (bcc2 == packet[*packetIndex - 1]){
                 state = STOP;
                 if (sendRRFrame(Nr) <= 0){
                     return -1;
@@ -401,7 +402,7 @@ int dataReadStateMachine(unsigned char byte, unsigned char *packet, int *packetI
                 if (sendREJFrame(Nr)<= 0){
                     return -1;
                 }
-                Nr = (Nr + 1) % 2;
+
             }
             }
         else{
