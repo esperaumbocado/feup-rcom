@@ -31,6 +31,12 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     // Create a buffer and test sending it
     if (link_layer_info.role == LlTx){
         unsigned char buf[5] = {0x01, 0x02, 0x03, 0x04, 0x05};
+        //calculate BCC2 of the buffer
+        unsigned char BCC2 = 0;
+        for (int i = 0; i < 5; i++){
+            BCC2 ^= buf[i];
+        }
+        printf("BCC2: 0x%02X\n", BCC2);
         int bufSize = 5;
         llwrite(buf, bufSize);
 
@@ -39,6 +45,10 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     if (link_layer_info.role == LlRx){
         unsigned char * packet = (unsigned char *) malloc(1000);
         llread(packet);
+        //print packet
+        for (int i = 0; i < 1000; i++){
+            printf("Ox%02X ", packet[i]);
+        }
     }
 
     llclose(0);

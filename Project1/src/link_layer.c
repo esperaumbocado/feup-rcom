@@ -56,7 +56,6 @@ typedef enum {
     STOP, // Stop state
     READING_DATA, // Reading data
     DATA_ESCAPE_RCV, // Received escape
-    DATA_FLAG_RCV, // Received flag
     PENDING_DATA, // Pending data
 
 } message_state; 
@@ -343,6 +342,7 @@ Data Read State Machine
 */
 int dataReadStateMachine(unsigned char byte, unsigned char *packet, int *packetIndex){
     printf("Data read state machine\n");
+    printf("Byte received: 0x%02X\n", byte);
     message_state oldstate = state;
     int bcc2 = 0;
 
@@ -387,7 +387,29 @@ int dataReadStateMachine(unsigned char byte, unsigned char *packet, int *packetI
         if (byte == ESCAPE){
             state = DATA_ESCAPE_RCV;
         }else if (byte == FLAG){
-            state = DATA_FLAG_RCV;
+            printf("Data flag received\n");
+        
+            printf("Test time\n");
+            for (int i = 0; i < (*packetIndex - 1); i++){
+                bcc2 ^= packet[i];
+            }
+
+            printf("End of test time\n");
+
+
+            if (bcc2 == packet[*packetIndex - 1]){
+                state = STOP;
+                if (sendRRFrame(Nr) <= 0){
+                    return -1;
+                }
+                packet[*packetIndex - 1] = '\0';
+                Nr = (Nr + 1) % 2;
+            }else{
+                if (sendREJFrame(Nr)<= 0){
+                    return -1;
+                }
+                Nr = (Nr + 1) % 2;
+            }
         }else{
             packet[*packetIndex] = byte;
             (*packetIndex)++;
@@ -402,25 +424,6 @@ int dataReadStateMachine(unsigned char byte, unsigned char *packet, int *packetI
             packet[*packetIndex] = ESCAPE;
             (*packetIndex)++;
             state = READING_DATA;
-        }
-        break;
-    case DATA_FLAG_RCV:
-        
-        for (int i = 0; i < *packetIndex; i++){
-            bcc2 ^= packet[i];
-        }
-
-        if (bcc2 == packet[*packetIndex]){
-            state = STOP;
-            if (sendRRFrame(Nr) <= 0){
-                return -1;
-            }
-            Nr = (Nr + 1) % 2;
-        }else{
-            if (sendREJFrame(Nr)<= 0){
-                return -1;
-            }
-            Nr = (Nr + 1) % 2;
         }
         break;
     default:
@@ -636,6 +639,8 @@ int llwrite(const unsigned char *buf, int bufSize){
         while (!alarmEnabled){
                     if (readByteSerialPort(&byte) > 0){
                         dataResponseStateMachine(byte,&dataValid);
+                    }else{
+                        printf("Error reading from serial port\n");
                     }
 
                     if (state == STOP){
