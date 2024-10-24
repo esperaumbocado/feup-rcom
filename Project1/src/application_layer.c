@@ -13,6 +13,69 @@
 unsigned char* buildControlPacket(int control_field, int L1, int length, int L2, const char* filename);
 unsigned char* buildDataPacket(unsigned char sequence_number, unsigned char* packet_data, int data_size);
 
+num
+
+void transmite(const char *filename) {
+    FILE* tx_file = fopen(filename, "rb");
+    long file_size = 0;
+    int sequence = 0;
+    struct stat st;
+    stat(filename, &st);
+    printf("filename %s \n", filename);
+    file_size = st.st_size;
+    printf("file size %li \n", file_size);
+    int L1 = file_size/8.0  ;
+    int L2 = strlen(filename);
+    unsigned char* control_packet_start = buildControlPacket(CONTROL_FIELD_START, L1, file_size, L2, filename);
+    int bufSize = 5 + L1 + L2;
+    printf("sending control");
+    if (llwrite((const unsigned char*)control_packet_start, bufSize) == -1) {
+        printf("Error starting\n");
+        exit(-1);
+    }
+    long bytes_left = file_size;
+    printf("control established \n");
+    while (bytes_left != 0) {
+        long data_size = bytes_left > MAX_PACKET_SIZE ? MAX_PACKET_SIZE : bytes_left;
+        unsigned char* data_to_send = (unsigned char*)malloc(sizeof(unsigned char) * data_size);
+        fread(data_to_send, sizeof(unsigned char), data_size, tx_file);
+        unsigned char* data_packet = buildDataPacket(sequence, data_to_send, data_size);
+        llwrite(data_packet, data_size + 4);
+        bytes_left = bytes_left - data_size;
+        sequence = (sequence + 1) % 99;
+    }
+    printf("file sent \n");
+    unsigned char * control_packet_end = buildControlPacket(CONTROL_FIELD_END, L1, file_size, L2, filename);
+    if (llwrite((const unsigned char*)control_packet_end, bufSize) == -1) {
+        printf("Error starting\n");
+        exit(-1);
+    }
+    printf("close \n");
+    break;
+}
+
+void recieve() {
+    unsigned char * packet = (unsigned char *) malloc(MAX_PACKET_SIZE);
+    llread(packet);
+    int bytes_recieved = 0;
+    unsigned char size_legth_bytes = packet[2];
+    unsigned char new_file_size = 0;
+    for(int i = 0; i < size_legth_bytes; i++) {
+        new_file_size |= packet[3 + i] << (size_legth_bytes - i - 1) * 8;
+    }
+    unsigned char fileNameNBytes = packet[3+size_legth_bytes+1];
+    unsigned char *new_file_name = (unsigned char*)malloc(fileNameNBytes);
+    memcpy(new_file_name, packet+3+size_legth_bytes+2, fileNameNBytes);
+    FILE* reciever_file = fopen((const char*)new_file_name, "wb+");
+    while(packet[0] != CONTROL_FIELD_END) {
+        int packet_recived_size = llread(packet);
+        bytes_recieved += MAX_PACKET_SIZE;
+        fwrite(packet, sizeof(unsigned char), packet_recived_size - 4, reciever_file);
+    }
+    fclose(reciever_file);
+    printf("close reciever \n");
+}
+
 
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
@@ -39,63 +102,11 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     }
     switch (link_layer_info.role) {
         case LlTx:
-            FILE* tx_file = fopen(filename, "rb");
-            long file_size = 0;
-            int sequence = 0;
-            struct stat st;
-            stat(filename, &st);
-            printf("filename %s \n", filename);
-            file_size = st.st_size;
-            printf("file size %li \n", file_size);
-            int L1 = file_size/8.0  ;
-            int L2 = strlen(filename);
-            unsigned char* control_packet_start = buildControlPacket(CONTROL_FIELD_START, L1, file_size, L2, filename);
-            int bufSize = 5 + L1 + L2;
-            printf("sending control");
-            if (llwrite((const unsigned char*)control_packet_start, bufSize) == -1) {
-                printf("Error starting\n");
-                exit(-1);
-            }
-            long bytes_left = file_size;
-            printf("control established \n");
-            while (bytes_left != 0) {
-                long data_size = bytes_left > MAX_PACKET_SIZE ? MAX_PACKET_SIZE : bytes_left;
-                unsigned char* data_to_send = (unsigned char*)malloc(sizeof(unsigned char) * data_size);
-                fread(data_to_send, sizeof(unsigned char), data_size, tx_file);
-                unsigned char* data_packet = buildDataPacket(sequence, data_to_send, data_size);
-                llwrite(data_packet, data_size + 4);
-                bytes_left = bytes_left - data_size;
-                sequence = (sequence + 1) % 99;
-            }
-            printf("file sent \n");
-            unsigned char * control_packet_end = buildControlPacket(CONTROL_FIELD_END, L1, file_size, L2, filename);
-            if (llwrite((const unsigned char*)control_packet_end, bufSize) == -1) {
-                printf("Error starting\n");
-                exit(-1);
-            }
-            printf("close \n");
+            transmite(filename);
             break;
 
         case LlRx:
-            unsigned char * packet = (unsigned char *) malloc(MAX_PACKET_SIZE);
-            llread(packet);
-            int bytes_recieved = 0;
-            unsigned char size_legth_bytes = packet[2];
-            unsigned char new_file_size = 0;
-            for(int i = 0; i < size_legth_bytes; i++) {
-                new_file_size |= packet[3 + i] << (size_legth_bytes - i - 1) * 8;
-            }
-            unsigned char fileNameNBytes = packet[3+size_legth_bytes+1];
-            unsigned char *new_file_name = (unsigned char*)malloc(fileNameNBytes);
-            memcpy(new_file_name, packet+3+size_legth_bytes+2, fileNameNBytes);
-            FILE* reciever_file = fopen((const char*)new_file_name, "wb+");
-            while(packet[0] != CONTROL_FIELD_END) {
-                int packet_recived_size = llread(packet);
-                bytes_recieved += MAX_PACKET_SIZE;
-                fwrite(packet, sizeof(unsigned char), packet_recived_size - 4, reciever_file);
-            }
-            fclose(reciever_file);
-            printf("close reciever \n");
+            recieve();
             break;
     }
     llclose(0);
