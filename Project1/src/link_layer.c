@@ -424,6 +424,12 @@ int dataReadStateMachine(unsigned char byte, unsigned char *packet, int *packetI
             packet[*packetIndex] = ESCAPE;
             (*packetIndex)++;
             state = READING_DATA;
+        }else{
+            packet[*packetIndex] = 0x7D;
+            (*packetIndex)++;
+            packet[*packetIndex] = byte;
+            (*packetIndex)++;
+            state = READING_DATA;
         }
         break;
     default:
@@ -595,15 +601,19 @@ int llwrite(const unsigned char *buf, int bufSize){
         BCC2 ^= buf[i];
     }
     
+    int i = 0;
     for (int cur_byte = 0; cur_byte < bufSize; cur_byte++){
         if (buf[cur_byte] == FLAG || buf[cur_byte] == ESCAPE){
             frameSize++;
             i_frame = (unsigned char *)realloc(i_frame, frameSize);
-            i_frame[4 + cur_byte] = ESCAPE;
-            cur_byte++;
-            i_frame[4 + cur_byte] = buf[cur_byte] ^ 0x20;
+            i_frame[4 + i] = ESCAPE;
+            i++;
+            i_frame[4 + i] = buf[i-1] ^ 0x20;
+            printf("0x%02X\n", i_frame[4 + i]);
+            i++;
         }else{
-            i_frame[4 + cur_byte] = buf[cur_byte];
+            i_frame[4 + i] = buf[i];
+            i++;
         }
     }
 
