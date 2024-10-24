@@ -17,6 +17,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             "====================================\n"
             "Error opening link layer connection\n"
             "====================================\n");
+            return;
     }else{
         printf(
             "====================================\n"
@@ -36,7 +37,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     }
 
     if (link_layer_info.role == LlRx){
-        unsigned char packet[5];
+        unsigned char * packet = (unsigned char *) malloc(1000);
         llread(packet);
     }
 

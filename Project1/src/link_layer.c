@@ -695,10 +695,12 @@ int llread(unsigned char *packet){
 ////////////////////////////////////////////////
 int llclose(int showStatistics){
 
+    int retransmissionsLeft = nRetransmissions;
+    unsigned char byte;
+
     switch(role){
         case LlTx:
 
-            int retransmissionsLeft = nRetransmissions;
 
             alarmCount = 0;
 
@@ -713,7 +715,6 @@ int llclose(int showStatistics){
                 state = START;
 
                 while (!alarmEnabled){
-                    unsigned char byte;
                     if (readByteSerialPort(&byte) > 0){
                         closeStateMachine(byte, role);
                     }
