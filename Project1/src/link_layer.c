@@ -603,13 +603,13 @@ int llwrite(const unsigned char *buf, int bufSize){
     
     int i = 4;
     for (int cur_byte = 0; cur_byte < bufSize; cur_byte++){
+        printf("0x%02X\n", buf[cur_byte]);
         if (buf[cur_byte] == FLAG || buf[cur_byte] == ESCAPE){
             frameSize++;
             i_frame = (unsigned char *)realloc(i_frame, frameSize);
             i_frame[i] = ESCAPE;
             i++;
             i_frame[i] = buf[cur_byte] ^ 0x20;
-            printf("0x%02X\n", i_frame[4 + i]);
             i++;
         }else{
             i_frame[i] = buf[cur_byte];

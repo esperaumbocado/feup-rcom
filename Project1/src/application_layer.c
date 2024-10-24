@@ -100,12 +100,12 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     }
     llclose(0);
     // Create a buffer and test sending it
+    
     /*
     if (link_layer_info.role == LlTx){
-        unsigned char buf[5] = {0x01, 0x02, 0x03, 0x04, 0x05};
-        int bufSize = 5;
+        unsigned char buf[8] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x7E, 0x03, 0x7E};
+        int bufSize = 8;
         llwrite(buf, bufSize);
-
     }
 
     if (link_layer_info.role == LlRx){
