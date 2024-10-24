@@ -37,7 +37,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             BCC2 ^= buf[i];
         }
         printf("BCC2: 0x%02X\n", BCC2);
-        int bufSize = 5;
+        int bufSize = 8;
         llwrite(buf, bufSize);
 
     }

@@ -601,24 +601,30 @@ int llwrite(const unsigned char *buf, int bufSize){
         BCC2 ^= buf[i];
     }
     
-    int i = 0;
+    int i = 4;
     for (int cur_byte = 0; cur_byte < bufSize; cur_byte++){
         if (buf[cur_byte] == FLAG || buf[cur_byte] == ESCAPE){
             frameSize++;
             i_frame = (unsigned char *)realloc(i_frame, frameSize);
-            i_frame[4 + i] = ESCAPE;
+            i_frame[i] = ESCAPE;
             i++;
-            i_frame[4 + i] = buf[i-1] ^ 0x20;
+            i_frame[i] = buf[cur_byte] ^ 0x20;
             printf("0x%02X\n", i_frame[4 + i]);
             i++;
         }else{
-            i_frame[4 + i] = buf[i];
+            i_frame[i] = buf[cur_byte];
             i++;
         }
     }
 
-    i_frame[frameSize - 2] = BCC2;
-    i_frame[frameSize - 1] = FLAG;
+    i_frame[i] = BCC2;
+    i++;
+    i_frame[i] = FLAG;
+
+    printf("Frame to be sent\n");
+    for (int i = 0; i < frameSize; i++){
+        printf("0x%02X ", i_frame[i]);
+    }
 
     int retranmissionsLeft = nRetransmissions;
 
