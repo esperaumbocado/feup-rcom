@@ -9,7 +9,7 @@
 #define TYPE_FILE_SIZE 0
 #define TYPE_FILE_NAME 1
 
-#define MAX_PACKET_SIZE 1024
+#define MAX_PACKET_SIZE 1000
 
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
