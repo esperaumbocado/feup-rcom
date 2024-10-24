@@ -47,10 +47,11 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             struct stat st;
             stat(filename, &st);
             file_size = st.st_size;
-            int L1 = (int) ceil(log2f((float)file_size)/8.0);
+            int L1 = file_size/8.0  ;
             int L2 = strlen(filename);
             unsigned char* control_packet_start = buildControlPacket(CONTROL_FIELD_START, L1, file_size, L2, filename);
             int bufSize = 5 + L1 + L2;
+            printf("sending control");
             if (llwrite((const unsigned char*)control_packet_start, bufSize) == -1) {
                 printf("Error starting\n");
                 exit(-1);

@@ -56,7 +56,6 @@ typedef enum {
     STOP, // Stop state
     READING_DATA, // Reading data
     DATA_ESCAPE_RCV, // Received escape
-    DATA_FLAG_RCV, // Received flag
     PENDING_DATA, // Pending data
 
 } message_state; 
@@ -387,8 +386,25 @@ int dataReadStateMachine(unsigned char byte, unsigned char *packet, int *packetI
         if (byte == ESCAPE){
             state = DATA_ESCAPE_RCV;
         }else if (byte == FLAG){
-            state = DATA_FLAG_RCV;
-        }else{
+            for (int i = 0; i < *packetIndex; i++){
+                bcc2 ^= packet[i];
+            }
+
+            if (bcc2 == packet[*packetIndex]){
+                state = STOP;
+                if (sendRRFrame(Nr) <= 0){
+                    return -1;
+                }
+                packet[*packetIndex - 1] = '\0';
+                Nr = (Nr + 1) % 2;
+            }else{
+                if (sendREJFrame(Nr)<= 0){
+                    return -1;
+                }
+                Nr = (Nr + 1) % 2;
+            }
+            }
+        else{
             packet[*packetIndex] = byte;
             (*packetIndex)++;
         }
@@ -402,25 +418,6 @@ int dataReadStateMachine(unsigned char byte, unsigned char *packet, int *packetI
             packet[*packetIndex] = ESCAPE;
             (*packetIndex)++;
             state = READING_DATA;
-        }
-        break;
-    case DATA_FLAG_RCV:
-        
-        for (int i = 0; i < *packetIndex; i++){
-            bcc2 ^= packet[i];
-        }
-
-        if (bcc2 == packet[*packetIndex]){
-            state = STOP;
-            if (sendRRFrame(Nr) <= 0){
-                return -1;
-            }
-            Nr = (Nr + 1) % 2;
-        }else{
-            if (sendREJFrame(Nr)<= 0){
-                return -1;
-            }
-            Nr = (Nr + 1) % 2;
         }
         break;
     default:
@@ -589,6 +586,7 @@ int llwrite(const unsigned char *buf, int bufSize){
     
     unsigned char BCC2 = 0;
     for (int i = 0; i < bufSize; i++){
+        printf("i = 0x%02X\n", buf[i]);
         BCC2 ^= buf[i];
     }
     
@@ -682,6 +680,7 @@ int llread(unsigned char *packet){
 
     while (state != STOP){
         if (readByteSerialPort(&byte) > 0){
+            printf("byte = 0x%02X\n", byte);
             int status = dataReadStateMachine(byte, packet, &packetIndex);
             if (status > 0) return packetIndex;
             if (status == -1) return -1;
