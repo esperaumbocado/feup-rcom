@@ -622,20 +622,29 @@ int llwrite(const unsigned char *buf, int bufSize){
     alarmCount = 0;
 
     while (retranmissionsLeft > 0){
+
+        if (retranmissionsLeft == 0){
+            printf("Max retransmissions reached, giving up.\n");
+            return -1;
+        }
+
+        printf ("====================\n"
+                "Sending information frame\n"
+                "====================\n");
+
         if (writeBytesSerialPort(i_frame, frameSize) <= 0){
             printf("Error writing to serial port\n");
             return -1;
         }
 
+        printf ("====================\n"
+                "Sent information frame\n"
+                "====================\n");
+
         alarm(timeout);
         alarmEnabled = FALSE;
 
         unsigned char byte;
-
-        printf ("====================\n"
-                "Sent information frame\n"
-                "====================\n");
-        
         
         // Resetting state machine
         state = START;
@@ -671,10 +680,6 @@ int llwrite(const unsigned char *buf, int bufSize){
             printf("Retransmission #%d\n", nRetransmissions - retranmissionsLeft);
         }
 
-        if (retranmissionsLeft == 0){
-            printf("Max retransmissions reached, giving up.\n");
-            return -1;
-        }
     }
     
     return 0;

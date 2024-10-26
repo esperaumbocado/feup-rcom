@@ -73,13 +73,13 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 long data_size = bytes_left > MAX_PACKET_SIZE ? MAX_PACKET_SIZE : bytes_left;
                 unsigned char* data_to_send = (unsigned char*)malloc(sizeof(unsigned char) * data_size);
                 fread(data_to_send, sizeof(unsigned char), data_size, tx_file);
-                for (size_t i = 0; i < data_size; i++) {
+                /*for (size_t i = 0; i < data_size; i++) {
                     printf("%c \n", data_to_send[i]);  
-                }
+                }*/
                 unsigned char* data_packet = buildDataPacket(sequence, data_to_send, data_size);
-                for (size_t i = 0; i < data_size + 4; i++) {
+                /*for (size_t i = 0; i < data_size + 4; i++) {
                     printf("%c \n", data_packet[i]);  
-                }
+                }*/
                 if(llwrite(data_packet, data_size + 4)==-1){
                     printf("===========================\n"
                            "Error sending data packet\n"
