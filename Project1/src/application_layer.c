@@ -69,10 +69,17 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             long bytes_left = file_size;
             printf("control established \n");
             while (bytes_left != 0) {
+                printf("bytes left = %li", bytes_left);
                 long data_size = bytes_left > MAX_PACKET_SIZE ? MAX_PACKET_SIZE : bytes_left;
                 unsigned char* data_to_send = (unsigned char*)malloc(sizeof(unsigned char) * data_size);
                 fread(data_to_send, sizeof(unsigned char), data_size, tx_file);
+                for (size_t i = 0; i < data_size; i++) {
+                    printf("%c \n", data_to_send[i]);  
+                }
                 unsigned char* data_packet = buildDataPacket(sequence, data_to_send, data_size);
+                for (size_t i = 0; i < data_size + 4; i++) {
+                    printf("%c \n", data_packet[i]);  
+                }
                 if(llwrite(data_packet, data_size + 4)==-1){
                     printf("===========================\n"
                            "Error sending data packet\n"
@@ -110,11 +117,16 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             while(packet[0] != CONTROL_FIELD_END) {
                 printf("PACKER NUMBER %d \n", num);
                 int packet_recived_size = llread(packet);
-                printf("packet recieved size %d \n", packet_recived_size);
-                bytes_recieved += packet_recived_size - 4;
-                fwrite(packet, sizeof(unsigned char), packet_recived_size - 4, reciever_file);
-                printf("bytes recieved %d \n", bytes_recieved);
-                num++;
+                if (packet_recived_size == -1) {
+                    printf("INVALID PACKET \n");
+                    continue;
+                }
+                if (packet[0] != CONTROL_FIELD_END) {
+                    printf("packet recieved size %d \n", packet_recived_size);
+                    bytes_recieved += MAX_PACKET_SIZE;
+                    fwrite(packet+4, sizeof(unsigned char), packet_recived_size - 4, reciever_file);
+                    printf("bytes recieved %d \n", bytes_recieved);
+                }
             }
             fclose(reciever_file);
             printf("close reciever \n");
