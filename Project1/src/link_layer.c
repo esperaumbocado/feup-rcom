@@ -387,6 +387,7 @@ int dataReadStateMachine(unsigned char byte, unsigned char *packet, int *packetI
         if (byte == ESCAPE){
             state = DATA_ESCAPE_RCV;
         }else if (byte == FLAG){
+            printf("End of Frame Detected. BCC2 Validation...\n");
             for (int i = 0; i < *packetIndex - 1; i++){
                 bcc2 ^= packet[i];
             }
@@ -394,7 +395,7 @@ int dataReadStateMachine(unsigned char byte, unsigned char *packet, int *packetI
             if (bcc2 == packet[*packetIndex - 1]){
                 state = STOP;
                 if (sendRRFrame(Nr) <= 0){
-                    return -1;
+                    return 0;
                 }
                 *packetIndex = *packetIndex - 1;
                 packet[*packetIndex] = '\0';
@@ -404,6 +405,8 @@ int dataReadStateMachine(unsigned char byte, unsigned char *packet, int *packetI
                 if (sendREJFrame(Nr)<= 0){
                     return -1;
                 }
+                state = START;
+                *packetIndex = 0;
             }
             }
         else{
@@ -411,7 +414,6 @@ int dataReadStateMachine(unsigned char byte, unsigned char *packet, int *packetI
             (*packetIndex)++;
             printf("byte = %c \n", byte);
             printf("index = %i \n", *packetIndex);
-
         }
         break;
     case DATA_ESCAPE_RCV:
@@ -620,20 +622,29 @@ int llwrite(const unsigned char *buf, int bufSize){
     alarmCount = 0;
 
     while (retranmissionsLeft > 0){
+
+        if (retranmissionsLeft == 0){
+            printf("Max retransmissions reached, giving up.\n");
+            return -1;
+        }
+
+        printf ("====================\n"
+                "Sending information frame\n"
+                "====================\n");
+
         if (writeBytesSerialPort(i_frame, frameSize) <= 0){
             printf("Error writing to serial port\n");
             return -1;
         }
 
+        printf ("====================\n"
+                "Sent information frame\n"
+                "====================\n");
+
         alarm(timeout);
         alarmEnabled = FALSE;
 
         unsigned char byte;
-
-        printf ("====================\n"
-                "Sent information frame\n"
-                "====================\n");
-        
         
         // Resetting state machine
         state = START;
@@ -669,10 +680,6 @@ int llwrite(const unsigned char *buf, int bufSize){
             printf("Retransmission #%d\n", nRetransmissions - retranmissionsLeft);
         }
 
-        if (retranmissionsLeft == 0){
-            printf("Max retransmissions reached, giving up.\n");
-            return -1;
-        }
     }
     
     return 0;
@@ -691,7 +698,8 @@ int llread(unsigned char *packet){
     int trys = 10;
 
     while (state != STOP){
-        if (readByteSerialPort(&byte) > 0){
+        //if (readByteSerialPort(&byte) > 0){
+            readByteSerialPort(&byte);
             printf("byte = 0x%02X\n", byte);
             status = dataReadStateMachine(byte, packet, &packetIndex);
             trys = 10;
@@ -736,6 +744,7 @@ int llread(unsigned char *packet){
         else {
             trys--;
         }
+
     }
     if (status >= 0) return packetIndex;
     return -1;

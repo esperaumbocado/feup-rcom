@@ -9,7 +9,7 @@
 #define TYPE_FILE_SIZE 0
 #define TYPE_FILE_NAME 1
 
-#define MAX_PACKET_SIZE 1024
+#define MAX_PACKET_SIZE 1000
 
 char num_bits(int n){
     char k = 0;
@@ -73,15 +73,17 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 long data_size = bytes_left > MAX_PACKET_SIZE ? MAX_PACKET_SIZE : bytes_left;
                 unsigned char* data_to_send = (unsigned char*)malloc(sizeof(unsigned char) * data_size);
                 fread(data_to_send, sizeof(unsigned char), data_size, tx_file);
-                for (size_t i = 0; i < data_size; i++) {
+                /*for (size_t i = 0; i < data_size; i++) {
                     printf("%c \n", data_to_send[i]);  
-                }
+                }*/
                 unsigned char* data_packet = buildDataPacket(sequence, data_to_send, data_size);
-                for (size_t i = 0; i < data_size + 4; i++) {
+                /*for (size_t i = 0; i < data_size + 4; i++) {
                     printf("%c \n", data_packet[i]);  
                 }
                 int bytes_sent = llwrite(data_packet, data_size + 4);
                 if(bytes_sent==-1){
+                }*/
+                if(llwrite(data_packet, data_size + 4)==-1){
                     printf("===========================\n"
                            "Error sending data packet\n"
                            "STOPPING TRANSMISSION\n"
@@ -119,7 +121,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             printf("new file size %d \n", new_file_size);
             
             FILE* reciever_file = fopen((const char*)filename, "wb+");
+            int num = 1;
             while(packet[0] != CONTROL_FIELD_END) {
+                printf("PACKER NUMBER %d \n", num);
                 int packet_recived_size = llread(packet);
                 if (packet_recived_size > 0) {
                     if (packet[0] != CONTROL_FIELD_END) {
