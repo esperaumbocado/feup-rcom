@@ -80,7 +80,8 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 for (size_t i = 0; i < data_size + 4; i++) {
                     printf("%c \n", data_packet[i]);  
                 }
-                if(llwrite(data_packet, data_size + 4)==-1){
+                int bytes_sent = llwrite(data_packet, data_size + 4);
+                if(bytes_sent==-1){
                     printf("===========================\n"
                            "Error sending data packet\n"
                            "STOPPING TRANSMISSION\n"
@@ -88,8 +89,13 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     
                     exit(-1);
                 }
-                bytes_left = bytes_left - data_size;
-                sequence = (sequence + 1) % 99;
+                else if (bytes_left == 0) {
+                    fseek(tx_file, -data_size, SEEK_CUR);
+                }
+                else {
+                    bytes_left = bytes_left - data_size;
+                    sequence = (sequence + 1) % 99;
+                }
             }
             printf("file sent \n");
             unsigned char * control_packet_end = buildControlPacket(CONTROL_FIELD_END, L1, file_size, L2, filename);
@@ -115,11 +121,16 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             FILE* reciever_file = fopen((const char*)filename, "wb+");
             while(packet[0] != CONTROL_FIELD_END) {
                 int packet_recived_size = llread(packet);
-                if (packet[0] != CONTROL_FIELD_END) {
-                    printf("packet recieved size %d \n", packet_recived_size);
-                    bytes_recieved += MAX_PACKET_SIZE;
-                    fwrite(packet+4, sizeof(unsigned char), packet_recived_size - 4, reciever_file);
-                    printf("bytes recieved %d \n", bytes_recieved);
+                if (packet_recived_size > 0) {
+                    if (packet[0] != CONTROL_FIELD_END) {
+                        printf("packet recieved size %d \n", packet_recived_size);
+                        bytes_recieved += MAX_PACKET_SIZE;
+                        fwrite(packet+4, sizeof(unsigned char), packet_recived_size - 4, reciever_file);
+                        printf("bytes recieved %d \n", bytes_recieved);
+                    }
+                }
+                else {
+                    break;
                 }
             }
             fclose(reciever_file);

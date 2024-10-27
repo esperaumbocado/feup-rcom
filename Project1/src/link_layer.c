@@ -533,7 +533,7 @@ int llopen(LinkLayer connectionParameters){
                     if (readByteSerialPort(&byte) > 0){
                         transmitterStateMachine(byte); 
                     }
-
+                    
                     if (state == STOP){
                         alarm(0);
                         return 0;
@@ -688,11 +688,53 @@ int llread(unsigned char *packet){
     int packetIndex = 0;
     state = START;
     int status = -1;
+    int trys = 10;
 
     while (state != STOP){
         if (readByteSerialPort(&byte) > 0){
             printf("byte = 0x%02X\n", byte);
             status = dataReadStateMachine(byte, packet, &packetIndex);
+            trys = 10;
+        }
+        else if (trys == 0) {
+            int retransmissionsLeft = nRetransmissions;
+
+            alarmCount = 0;
+
+            while (retransmissionsLeft > 0){
+                if (sendREJFrame(Nr) <= 0){
+                    return -1;
+                }
+
+                alarm(timeout);
+                alarmEnabled = FALSE;
+                state = START;
+
+                while (!alarmEnabled){
+                    if (readByteSerialPort(&byte) > 0){
+                        transmitterStateMachine(byte);
+                    }
+
+                    if (state == STOP){
+                        alarm(0);
+                        return 0;
+                    }
+                }
+
+                if (alarmEnabled){
+                    alarmEnabled = FALSE;
+                    retransmissionsLeft--;
+                    printf("Retransmission #%d\n", nRetransmissions - retransmissionsLeft);
+                }
+            }
+
+            if (retransmissionsLeft == 0){
+                printf("Max retransmissions reached, giving up.\n");
+                return -1;
+            }
+        }
+        else {
+            trys--;
         }
     }
     if (status >= 0) return packetIndex;
