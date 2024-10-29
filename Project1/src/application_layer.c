@@ -68,28 +68,28 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             }
             long bytes_left = file_size;
             printf("control established \n");
+            free(control_packet_start);
             while (bytes_left != 0) {
                 printf("bytes left = %li", bytes_left);
                 long data_size = bytes_left > MAX_PACKET_SIZE ? MAX_PACKET_SIZE : bytes_left;
                 unsigned char* data_to_send = (unsigned char*)malloc(sizeof(unsigned char) * data_size);
                 fread(data_to_send, sizeof(unsigned char), data_size, tx_file);
-                /*for (size_t i = 0; i < data_size; i++) {
-                    printf("%c \n", data_to_send[i]);  
-                }*/
                 unsigned char* data_packet = buildDataPacket(sequence, data_to_send, data_size);
-                /*for (size_t i = 0; i < data_size + 4; i++) {
-                    printf("%c \n", data_packet[i]);  
-                }*/
-                if(llwrite(data_packet, data_size + 4)==-1){
+                int llwrite_return = llwrite(data_packet, data_size + 4);
+                if(llwrite_return == -1) {
                     printf("===========================\n"
                            "Error sending data packet\n"
                            "STOPPING TRANSMISSION\n"
                            "===========================\n");
-    
                     exit(-1);
+                } else if (llwrite_return == 0) {
+                    printf("Retransmission\n");
+                    fseek(tx_file, -data_size, SEEK_CUR); // Move the file pointer back to retry reading the same part
+                    continue;
+                } else {
+                    bytes_left = bytes_left - data_size;
+                    sequence = (sequence + 1) % 99;
                 }
-                bytes_left = bytes_left - data_size;
-                sequence = (sequence + 1) % 99;
             }
             printf("file sent \n");
             unsigned char * control_packet_end = buildControlPacket(CONTROL_FIELD_END, L1, file_size, L2, filename);
@@ -98,6 +98,8 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 exit(-1);
             }
             printf("close \n");
+            fclose(tx_file);
+            free(control_packet_end);
             break;
 
         case LlRx:
@@ -129,6 +131,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 }
             }
             fclose(reciever_file);
+            free(packet);
             printf("close reciever \n");
             break;
     }
