@@ -47,6 +47,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             "====================================\n",
             fd);
     }
+    
     switch (link_layer_info.role) {
         case LlTx:
             FILE* tx_file = fopen(filename, "rb");
@@ -115,6 +116,11 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             printf("new file size %d \n", new_file_size);
             
             FILE* reciever_file = fopen((const char*)filename, "wb+");
+            if (reciever_file == NULL) {
+                printf("Error opening file \n");
+                exit(-1);
+            }
+
             int num = 1;
             while(packet[0] != CONTROL_FIELD_END) {
                 printf("PACKER NUMBER %d \n", num);
@@ -128,10 +134,14 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                     bytes_recieved += MAX_PACKET_SIZE;
                     fwrite(packet+4, sizeof(unsigned char), packet_recived_size - 4, reciever_file);
                     printf("bytes recieved %d \n", bytes_recieved);
+                }else{
+                    printf("END PACKET RECIEVED \n");
+                    //fclose(reciever_file);  // CAUSES free() invalid size
+                    printf("file recieved \n");
+                    break;
                 }
             }
-            fclose(reciever_file);
-            free(packet);
+            //fclose(reciever_file);
             printf("close reciever \n");
             break;
     }
@@ -159,8 +169,8 @@ unsigned char* buildDataPacket(unsigned char sequence_number, unsigned char* pac
     unsigned char* packet = (unsigned char*) malloc(4 + data_size);
     packet[0] = CONTROL_FIELD_DATA;
     packet[1] = sequence_number;
-    packet[2] = (data_size >> 8) && 0xFF, 
-    packet[3] = data_size && 0xFF;
+    packet[2] = (data_size >> 8) & 0xFF, 
+    packet[3] = data_size & 0xFF;
     memcpy(packet+4, packet_data, data_size);
     return packet;
 }
