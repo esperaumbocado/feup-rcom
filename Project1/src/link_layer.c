@@ -76,7 +76,7 @@ ALARM HANDLER
 void handle_alarm(int sig){
     alarmEnabled = TRUE;
     alarmCount++;
-    printf("Alarm #%d\n", alarmCount); // Debug
+    //printf("Alarm #%d\n", alarmCount); // Debug
 }
 
 
@@ -635,7 +635,7 @@ int llwrite(const unsigned char *buf, int bufSize){
 
     alarmCount = 0;
 
-    while (retranmissionsLeft > 0){
+    while (retranmissionsLeft >= 0){
 
         printf ("====================\n"
                 "Sending information frame\n"
@@ -686,6 +686,9 @@ int llwrite(const unsigned char *buf, int bufSize){
         if (alarmEnabled){
             alarmEnabled = FALSE; 
             retranmissionsLeft--;  
+            if (retranmissionsLeft == -1){
+                return -1;
+            }
             printf("Retransmission #%d\n", nRetransmissions - retranmissionsLeft);
         }
 
