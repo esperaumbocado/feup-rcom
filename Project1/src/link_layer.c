@@ -723,7 +723,7 @@ int llclose(int showStatistics){
 
     switch(role){
         case LlTx:
-
+            {
             int retransmissionsLeft = nRetransmissions;
 
             alarmCount = 0;
@@ -764,7 +764,9 @@ int llclose(int showStatistics){
             }
             
             break;
+            }
         case LlRx:
+            {
             unsigned char byte;
             // Wait for DISC frame, send DISC frame, wait for UA frame
             state = START;
@@ -816,6 +818,7 @@ int llclose(int showStatistics){
             }
 
             break;
+            }
     }
 
     int clstat = closeSerialPort();

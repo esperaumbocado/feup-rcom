@@ -50,6 +50,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     
     switch (link_layer_info.role) {
         case LlTx:
+            {
             FILE* tx_file = fopen(filename, "rb");
             long file_size = 0;
             int sequence = 0;
@@ -102,8 +103,10 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             fclose(tx_file);
             free(control_packet_end);
             break;
+            }
 
         case LlRx:
+            {
             unsigned char * packet = (unsigned char *) malloc(MAX_PACKET_SIZE);
             llread(packet);
             int bytes_recieved = 0;
@@ -144,6 +147,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             //fclose(reciever_file);
             printf("close reciever \n");
             break;
+            }
     }
     llclose(0);
     // Create a buffer and test sending it
