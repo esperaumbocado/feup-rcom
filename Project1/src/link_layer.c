@@ -59,8 +59,19 @@ typedef enum {
 
 } message_state; 
 
+
+typedef struct {
+    int numFramesSent;
+    int numFramesReceived;
+    int numRetransmissions;
+    int numFramesRejected;
+    int numStuffedBytes;
+} Statistics;
+
 // State machine related variables
 message_state state = START;
+
+Statistics statistics = {0, 0, 0, 0};
 
 
 // Numeration of data frames
@@ -76,6 +87,7 @@ ALARM HANDLER
 void handle_alarm(int sig){
     alarmEnabled = TRUE;
     alarmCount++;
+    statistics.numRetransmissions++;
     //printf("Alarm #%d\n", alarmCount); // Debug
 }
 
@@ -415,12 +427,14 @@ int dataReadStateMachine(unsigned char byte, unsigned char *packet, int *packetI
                 packet[*packetIndex] = '\0';
                 Nr = (Nr + 1) % 2;
                 printf("index = %i \n", *packetIndex);
+                statistics.numFramesSent++;
             }else{
                 if (sendREJFrame(Nr)<= 0){
                     return -1;
                 }
                 state = START;
                 *packetIndex = 0;
+                statistics.numFramesRejected++;
             }
             }
         else{
@@ -541,6 +555,7 @@ int llopen(LinkLayer connectionParameters){
                 
                 alarm(timeout);
 
+
                 alarmEnabled = FALSE;
                 state = START;  // Reset state machine
 
@@ -621,6 +636,7 @@ int llwrite(const unsigned char *buf, int bufSize){
             i++;
             i_frame[i] = buf[cur_byte] ^ 0x20;
             i++;
+            statistics.numStuffedBytes++;
         }else{
             i_frame[i] = buf[cur_byte];
             i++;
@@ -645,6 +661,7 @@ int llwrite(const unsigned char *buf, int bufSize){
             printf("Error writing to serial port\n");
             return -1;
         }
+        statistics.numFramesSent++;
 
         printf ("====================\n"
                 "Sent information frame\n"
@@ -680,6 +697,7 @@ int llwrite(const unsigned char *buf, int bufSize){
         }else if (state == STOP && !dataValid){
             free(i_frame);
             printf("Receiver responded to the data as invalid\n");
+            statistics.numFramesRejected++;
             return 0;
         }
 
@@ -750,6 +768,19 @@ int llclose(int showStatistics){
                     if (state == STOP){
                         sendUAFrame();
                         alarm(0);
+                        if (showStatistics){
+                            printf("Statistics:\n"
+                                "====================\n"
+                                "  - Number of frames sent: %d\n"
+                                "  - Number of retransmissions: %d\n"
+                                "  - Number of frames rejected: %d\n"
+                                "  - Number of stuffed bytes: %d\n"
+                                "====================\n",
+                                statistics.numFramesSent,
+                                statistics.numRetransmissions,
+                                statistics.numFramesRejected,
+                                statistics.numStuffedBytes);
+                        }
                         return 0;
                     }
                 }
@@ -803,6 +834,19 @@ int llclose(int showStatistics){
 
                         if (state == STOP){
                             alarm(0);
+                            if (showStatistics){
+                                printf("Statistics:\n"
+                                       "====================\n"
+                                       "  - Number of frames sent: %d\n"
+                                       "  - Number of retransmissions: %d\n"
+                                       "  - Number of frames rejected: %d\n"
+                                       "  - Number of stuffed bytes: %d\n"
+                                       "====================\n",
+                                       statistics.numFramesSent,
+                                       statistics.numRetransmissions,
+                                       statistics.numFramesRejected,
+                                       statistics.numStuffedBytes);
+                            }
                             return 0;
                         }
                     }

@@ -149,7 +149,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             break;
             }
     }
-    llclose(0);
+    llclose(1);
 }
 
 // Build the data packet to be sent
