@@ -2,6 +2,7 @@
 
 #include "link_layer.h"
 #include "serial_port.h"
+#include <time.h>
 
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
@@ -66,12 +67,16 @@ typedef struct {
     int numRetransmissions;
     int numFramesRejected;
     int numStuffedBytes;
+    double transmissionTime;
 } Statistics;
+
+static time_t start_of_clock;
+
 
 // State machine related variables
 message_state state = START;
 
-Statistics statistics = {0, 0, 0, 0};
+Statistics statistics = {0, 0, 0, 0, 0.0};
 
 
 // Numeration of data frames
@@ -548,7 +553,7 @@ int llopen(LinkLayer connectionParameters){
     switch(connectionParameters.role){
         case LlTx:
             alarmCount = 0;
-            while (retransmissionsLeft > 0){
+            while (retransmissionsLeft >= 0){
                 if (sendSetFrame() <= 0) {  // Send SET frame
                     return -1;
                 }
@@ -567,6 +572,7 @@ int llopen(LinkLayer connectionParameters){
 
                     if (state == STOP){
                         alarm(0);
+                        start_of_clock = time(NULL);
                         return 0;
                     }
                 }
@@ -593,10 +599,11 @@ int llopen(LinkLayer connectionParameters){
                 }
             }
             sendUAFrame();
+            start_of_clock = time(NULL);
             break;
     }
 
-
+    
     return 1;
 }
 
@@ -742,6 +749,9 @@ int llread(unsigned char *packet){
 ////////////////////////////////////////////////
 int llclose(int showStatistics){
 
+    time_t end_of_clock = time(NULL);
+    statistics.transmissionTime = difftime(end_of_clock, start_of_clock);
+
     switch(role){
         case LlTx:
             {
@@ -750,7 +760,7 @@ int llclose(int showStatistics){
             alarmCount = 0;
 
             // Try to send DISC frame with alarm until getting another DISC frame
-            while (retransmissionsLeft > 0){
+            while (retransmissionsLeft >= 0){
                 if (sendDISCFrame() <= 0){
                     return -1;
                 }
@@ -775,11 +785,13 @@ int llclose(int showStatistics){
                                 "  - Number of retransmissions: %d\n"
                                 "  - Number of frames rejected: %d\n"
                                 "  - Number of stuffed bytes: %d\n"
+                                "  - Transmission time: %.2f\n"
                                 "====================\n",
                                 statistics.numFramesSent,
                                 statistics.numRetransmissions,
                                 statistics.numFramesRejected,
-                                statistics.numStuffedBytes);
+                                statistics.numStuffedBytes,
+                                statistics.transmissionTime);
                         }
                         return 0;
                     }
@@ -817,7 +829,7 @@ int llclose(int showStatistics){
 
                 alarmCount = 0;
 
-                while (retransmissionsLeft > 0){
+                while (retransmissionsLeft >= 0){
                     if (sendDISCFrame() <= 0){
                         return -1;
                     }
@@ -841,11 +853,13 @@ int llclose(int showStatistics){
                                        "  - Number of retransmissions: %d\n"
                                        "  - Number of frames rejected: %d\n"
                                        "  - Number of stuffed bytes: %d\n"
+                                       " - Transmission time: %.2f\n"
                                        "====================\n",
                                        statistics.numFramesSent,
                                        statistics.numRetransmissions,
                                        statistics.numFramesRejected,
-                                       statistics.numStuffedBytes);
+                                       statistics.numStuffedBytes,
+                                       statistics.transmissionTime);
                             }
                             return 0;
                         }
