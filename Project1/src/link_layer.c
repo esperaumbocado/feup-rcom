@@ -2,7 +2,7 @@
 
 #include "link_layer.h"
 #include "serial_port.h"
-#include <time.h>
+#include <sys/time.h>
 
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
@@ -70,7 +70,8 @@ typedef struct {
     double transmissionTime;
 } Statistics;
 
-static time_t start_of_clock;
+static struct timeval start_of_clock;
+struct timeval end_of_clock;
 
 
 // State machine related variables
@@ -536,6 +537,8 @@ void closeStateMachine(unsigned char byte,LinkLayerRole role){
 // LLOPEN
 ////////////////////////////////////////////////
 int llopen(LinkLayer connectionParameters){
+    gettimeofday(&start_of_clock, NULL);
+    
     if (openSerialPort(connectionParameters.serialPort,
                        connectionParameters.baudRate) < 0){
         return -1;
@@ -572,7 +575,6 @@ int llopen(LinkLayer connectionParameters){
 
                     if (state == STOP){
                         alarm(0);
-                        start_of_clock = time(NULL);
                         return 0;
                     }
                 }
@@ -599,7 +601,6 @@ int llopen(LinkLayer connectionParameters){
                 }
             }
             sendUAFrame();
-            start_of_clock = time(NULL);
             break;
     }
 
@@ -749,8 +750,6 @@ int llread(unsigned char *packet){
 ////////////////////////////////////////////////
 int llclose(int showStatistics){
 
-    time_t end_of_clock = time(NULL);
-    statistics.transmissionTime = difftime(end_of_clock, start_of_clock);
 
     switch(role){
         case LlTx:
@@ -778,6 +777,8 @@ int llclose(int showStatistics){
                     if (state == STOP){
                         sendUAFrame();
                         alarm(0);
+                        gettimeofday(&end_of_clock, NULL);
+                        statistics.transmissionTime = (end_of_clock.tv_sec - start_of_clock.tv_sec) + (end_of_clock.tv_usec - start_of_clock.tv_usec) / 1e6;
                         if (showStatistics){
                             printf("Statistics:\n"
                                 "====================\n"
@@ -785,7 +786,7 @@ int llclose(int showStatistics){
                                 "  - Number of retransmissions: %d\n"
                                 "  - Number of frames rejected: %d\n"
                                 "  - Number of stuffed bytes: %d\n"
-                                "  - Transmission time: %.2f\n"
+                                "  - Transmission time: %.5f\n"
                                 "====================\n",
                                 statistics.numFramesSent,
                                 statistics.numRetransmissions,
@@ -793,7 +794,13 @@ int llclose(int showStatistics){
                                 statistics.numStuffedBytes,
                                 statistics.transmissionTime);
                         }
+
+
+
+
                         return 0;
+
+                        
                     }
                 }
 
@@ -846,6 +853,8 @@ int llclose(int showStatistics){
 
                         if (state == STOP){
                             alarm(0);
+                            gettimeofday(&end_of_clock, NULL);
+                        statistics.transmissionTime = (end_of_clock.tv_sec - start_of_clock.tv_sec) + (end_of_clock.tv_usec - start_of_clock.tv_usec) / 1e6;
                             if (showStatistics){
                                 printf("Statistics:\n"
                                        "====================\n"
@@ -853,7 +862,7 @@ int llclose(int showStatistics){
                                        "  - Number of retransmissions: %d\n"
                                        "  - Number of frames rejected: %d\n"
                                        "  - Number of stuffed bytes: %d\n"
-                                       " - Transmission time: %.2f\n"
+                                       " - Transmission time: %.5f\n"
                                        "====================\n",
                                        statistics.numFramesSent,
                                        statistics.numRetransmissions,
@@ -861,6 +870,8 @@ int llclose(int showStatistics){
                                        statistics.numStuffedBytes,
                                        statistics.transmissionTime);
                             }
+
+
                             return 0;
                         }
                     }
@@ -881,6 +892,7 @@ int llclose(int showStatistics){
             break;
             }
     }
+
 
     int clstat = closeSerialPort();
     return clstat;
