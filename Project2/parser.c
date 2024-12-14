@@ -6,7 +6,7 @@
 #include <netdb.h>
 #include "parser.h"
 
-int parse(char *input, struct URL *url) {
+int parse(char *input, char *host, char *resource, char *file, char *user, char *password, char *ip) {
     printf("ENTERED PARSE\n");
 
     regex_t regex;
@@ -16,28 +16,28 @@ int parse(char *input, struct URL *url) {
     regcomp(&regex, "@", 0);
     if (regexec(&regex, input, 0, NULL, 0) != 0) { // ANONYMOUS MODE
         
-        sscanf(input, "%*[^/]//%[^/]", url->host);
-        strcpy(url->user, DEFAULT_USER);
-        strcpy(url->password, DEFAULT_PASSWORD);
+        sscanf(input, "%*[^/]//%[^/]", host);
+        strcpy(user, DEFAULT_USER);
+        strcpy(password, DEFAULT_PASSWORD);
 
     } else { // AUTHENTICATED MODE
 
-        sscanf(input, "%*[^/]//%*[^@]@%[^/]", url->host);
-        sscanf(input, "%*[^/]//%[^:/]", url->user);
-        sscanf(input, "%*[^/]//%*[^:]:%[^@\n$]", url->password);
+        sscanf(input, "%*[^/]//%*[^@]@%[^/]", host);
+        sscanf(input, "%*[^/]//%[^:/]", user);
+        sscanf(input, "%*[^/]//%*[^:]:%[^@\n$]", password);
     }
 
-    sscanf(input, "%*[^/]//%*[^/]/%s", url->resource);
-    strcpy(url->file, strrchr(input, '/') + 1);
+    sscanf(input, "%*[^/]//%*[^/]/%s", resource);
+    strcpy(file, strrchr(input, '/') + 1);
 
     struct hostent *h;
-    if (strlen(url->host) == 0) return -1;
-    if ((h = gethostbyname(url->host)) == NULL) {
-        printf("Invalid hostname '%s'\n", url->host);
+    if (strlen(host) == 0) return -1;
+    if ((h = gethostbyname(host)) == NULL) {
+        printf("Invalid hostname '%s'\n", host);
         exit(-1);
     }
-    strcpy(url->ip, inet_ntoa(*((struct in_addr *) h->h_addr)));
+    strcpy(ip, inet_ntoa(*((struct in_addr *) h->h_addr)));
 
-    return !(strlen(url->host) && strlen(url->user) && 
-           strlen(url->password) && strlen(url->resource) && strlen(url->file));
+    return !(strlen(host) && strlen(user) && 
+           strlen(password) && strlen(resource) && strlen(file));
 }

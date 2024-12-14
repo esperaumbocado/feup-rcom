@@ -15,47 +15,48 @@ int main(int argc, char *argv[]) {
         exit(-1);
     } 
 
-    struct URL url;
-    memset(&url, 0, sizeof(url));
-    if (parse(argv[1], &url) != 0) {
+    char host[MAX_LENGTH], resource[MAX_LENGTH], file[MAX_LENGTH], user[MAX_LENGTH], password[MAX_LENGTH], ip[MAX_LENGTH];
+
+
+    if (parse(argv[1], host, resource, file, user, password, ip) != 0) {
         printf("Parse error. Usage: ./download ftp://[<user>:<password>@]<host>/<url-path>\n");
         exit(-1);
     }
     
-    printf("-------------------\n URL INFO\n-------------------\nHost: %s\nResource: %s\nFile: %s\nUser: %s\nPassword: %s\nIP Address: %s\n-------------------\n", url.host, url.resource, url.file, url.user, url.password, url.ip);
+    printf("-------------------\n URL INFO\n-------------------\nHost: %s\nResource: %s\nFile: %s\nUser: %s\nPassword: %s\nIP Address: %s\n-------------------\n", host, resource, file, user, password, ip);
 
     char answer[MAX_LENGTH];
-    int socketA = createSocket(url.ip, FTP_PORT);
+    int socketA = createSocket(ip, FTP_PORT);
     if (socketA < 0 || readResponse(socketA, answer) != READY4AUTH_CODE) {
-        printf("Socket to '%s' and port %d failed\n", url.ip, FTP_PORT);
+        printf("Socket to '%s' and port %d failed\n", ip, FTP_PORT);
         exit(-1);
     }
     
-    if (authFTP(socketA, url.user, url.password) != LOGINSUCCESS_CODE) {
-        printf("Authentication failed with username = '%s' and password = '%s'.\n", url.user, url.password);
+    if (authFTP(socketA, user, password) != LOGINSUCCESS_CODE) {
+        printf("Authentication failed with username = '%s' and password = '%s'.\n", user, password);
         exit(-1);
     }
     
     int port;
-    char ip[MAX_LENGTH];
-    if (enterPassiveMode(socketA, ip, &port) != PASSIVE_CODE) {
+    char ip_pass[MAX_LENGTH];
+    if (enterPassiveMode(socketA, ip_pass, &port) != PASSIVE_CODE) {
         printf("Passive mode failed\n");
         exit(-1);
     }
 
-    int socketB = createSocket(ip, port);
+    int socketB = createSocket(ip_pass, port);
     if (socketB < 0) {
-        printf("Socket to '%s:%d' failed\n", ip, port);
+        printf("Socket to '%s:%d' failed\n", ip_pass, port);
         exit(-1);
     }
 
-    if (requestResource(socketA, url.resource) != READY4TRANSFER_CODE) {
-        printf("Unknown resouce '%s' in '%s:%d'\n", url.resource, ip, port);
+    if (requestResource(socketA, resource) != READY4TRANSFER_CODE) {
+        printf("Unknown resouce '%s' in '%s:%d'\n", resource, ip_pass, port);
         exit(-1);
     }
 
-    if (getResource(socketA, socketB, url.file) != TRANSFER_COMPLETE_CODE) {
-        printf("Error transfering file '%s' from '%s:%d'\n", url.file, ip, port);
+    if (getResource(socketA, socketB, file) != TRANSFER_COMPLETE_CODE) {
+        printf("Error transfering file '%s' from '%s:%d'\n", file, ip_pass, port);
         exit(-1);
     }
 

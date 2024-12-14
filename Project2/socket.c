@@ -37,13 +37,13 @@ int authFTP(const int socket, const char* user, const char* pass) {
     sprintf(passCommand, "pass %s\n", pass);
     char answer[MAX_LENGTH];
     
-    write(socket, userCommand, strlen(userCommand));
+    sendCommand(socket, userCommand);
     if (readResponse(socket, answer) != READY4PASS_CODE) {
         printf("Unknown user '%s'. Abort.\n", user);
         exit(-1);
     }
 
-    write(socket, passCommand, strlen(passCommand));
+    sendCommand(socket, passCommand);
     return readResponse(socket, answer);
 }
 
@@ -52,7 +52,8 @@ int enterPassiveMode(const int socket, char *ip, int *port) {
 
     char answer[MAX_LENGTH];
     int ip1, ip2, ip3, ip4, port1, port2;
-    write(socket, "pasv\n", 5);
+    char passiveCommand[5] = "pasv\n";
+    sendCommand(socket, passiveCommand);
     if (readResponse(socket, answer) != PASSIVE_CODE) 
         return -1;
 
@@ -116,7 +117,8 @@ int closeConnection(const int socketA, const int socketB) {
     printf("ENTERED CLOSE CONNECTION\n");
     
     char answer[MAX_LENGTH];
-    write(socketA, "quit\n", 5);
+    char quitCommand[5] = "quit\n";
+    sendCommand(socketA, quitCommand);
     if (readResponse(socketA, answer) != GOODBYE_CODE) 
         return -1;
     return close(socketA) || close(socketB);

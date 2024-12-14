@@ -9,7 +9,7 @@ int requestResource(const int socket, char *resource) {
 
     char fileCommand[5+strlen(resource)+1], answer[MAX_LENGTH];
     sprintf(fileCommand, "retr %s\n", resource);
-    write(socket, fileCommand, sizeof(fileCommand));
+    sendCommand(socket, fileCommand);
     return readResponse(socket, answer);
 }
 

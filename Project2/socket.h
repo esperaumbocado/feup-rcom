@@ -2,6 +2,7 @@
 #define SOCKET_H
 
 #include "constants.h"
+#include "utils.h"
 
 int createSocket(char *ip, int port);
 int authFTP(const int socket, const char* user, const char* pass);

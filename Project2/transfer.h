@@ -3,6 +3,7 @@
 
 #include "constants.h"
 #include "socket.h"
+#include "utils.h"
 
 int requestResource(const int socket, char *resource);
 int getResource(const int socketA, const int socketB, char *filename);
