@@ -12,19 +12,13 @@ int parse(char *input, char *host, char *resource, char *file, char *user, char 
 
     if (!contains_at_symbol(input)) { // ANONYMOUS MODE
         
-        sscanf(input, "%*[^/]//%[^/]", host);
-        strcpy(user, DEFAULT_USER);
-        strcpy(password, DEFAULT_PASSWORD);
+        get_details_anonymous(input,host,user,password);
 
     } else { // AUTHENTICATED MODE
-
-        sscanf(input, "%*[^/]//%*[^@]@%[^/]", host);
-        sscanf(input, "%*[^/]//%[^:/]", user);
-        sscanf(input, "%*[^/]//%*[^:]:%[^@\n$]", password);
+        get_details_authenticated(input,host,user,password);
     }
 
-    sscanf(input, "%*[^/]//%*[^/]/%s", resource);
-    strcpy(file, strrchr(input, '/') + 1);
+    get_file_details(input,resource,file);
 
     struct hostent *h;
     if (strlen(host) == 0) return -1;
