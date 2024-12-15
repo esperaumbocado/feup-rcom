@@ -91,7 +91,7 @@ int main(int argc, char *argv[]) {
             case STATE_REQUEST_RESOURCE:
                 {
                     int requestResourceValue = requestResource(socketA, resource);
-                    printf("REQUEST RESOURCE VALUE %d\n", requestResourceValue);
+                    //Uprintf("REQUEST RESOURCE VALUE %d\n", requestResourceValue);
                     if (requestResourceValue != READY4TRANSFER_CODE && requestResourceValue != READY4TRANSFER_CODE2) {
                         printf("Unknown resource '%s' in '%s:%d'\n", resource, ip_pass, port);
                         currentState = STATE_ERROR;
@@ -132,6 +132,6 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    printf("FTP download completed successfully.\n");
+    printf("-------------------\nFTP download completed successfully.\n");
     return 0;
 }

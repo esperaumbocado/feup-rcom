@@ -7,7 +7,7 @@
 #include "socket.h"
 
 int createSocket(char *ip, int port) {
-    printf("ENTERED CREATE SOCKET\n");
+    //printf("ENTERED CREATE SOCKET\n");
 
     int sockfd;
     struct sockaddr_in server_addr;
@@ -30,7 +30,7 @@ int createSocket(char *ip, int port) {
 }
 
 int authFTP(const int socket, const char* user, const char* pass) {
-    printf("ENTERED AUTHCONN\n");
+    //printf("ENTERED AUTHCONN\n");
 
     char userCommand[5 + strlen(user) + 2 + 1]; 
     sprintf(userCommand, "user %s\r\n", user);
@@ -40,20 +40,20 @@ int authFTP(const int socket, const char* user, const char* pass) {
     
     sendCommand(socket, userCommand);
     int readResponseValue = readResponse(socket,answer);
-    printf("COMMAND SENT | RESPONSE VALUE: %d", readResponseValue);
+    //printf("COMMAND SENT | RESPONSE VALUE: %d", readResponseValue);
     if (readResponseValue != READY4PASS_CODE) {
         printf("Unknown user '%s'. Abort.\n", user);
         exit(-1);
     }
 
-    printf("USER OK\n");
+    //printf("USER OK\n");
 
     sendCommand(socket, passCommand);
     return readResponse(socket, answer);
 }
 
 int enterPassiveMode(const int socket, char *ip, int *port) {
-    printf("ENTERED PASSIVE MODE\n");
+    //printf("ENTERED PASSIVE MODE\n");
 
     char answer[MAX_LENGTH];
     int ip1, ip2, ip3, ip4, port1, port2;
@@ -70,18 +70,18 @@ int enterPassiveMode(const int socket, char *ip, int *port) {
 }
 
 int readResponse(const int socket, char *buffer) {
-    printf("ENTERED READ RESPONSE\n");
+    //printf("ENTERED READ RESPONSE\n");
     char byte;
     int index = 0;
     int responseCode = 0;
 
-    printf("STARTED BUFF CLEAR\n");
+    //printf("STARTED BUFF CLEAR\n");
     memset(buffer, 0, MAX_LENGTH);
-    printf("ENDED BUFF CLEAR\n");
+    //printf("ENDED BUFF CLEAR\n");
 
     while (1) {
         if (read(socket, &byte, 1) > 0) {
-            printf("BYTE: %c\n", byte);
+            //printf("BYTE: %c\n", byte);
             buffer[index++] = byte;
             buffer[index] = '\0';
 
@@ -106,14 +106,13 @@ int readResponse(const int socket, char *buffer) {
         }
     }
 
-    printf("Response: %s", buffer);
-    printf("Response code: %d\n", responseCode);
+    printf("Response code: %d | Response: %s", responseCode, buffer);
     return responseCode;
 }
 
 
 int closeConnection(const int socketA) {
-    printf("ENTERED CLOSE CONNECTION\n");
+    //printf("ENTERED CLOSE CONNECTION\n");
     
     char answer[MAX_LENGTH];
     char quitCommand[7] = "quit\r\n";

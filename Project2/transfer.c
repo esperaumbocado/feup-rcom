@@ -5,7 +5,7 @@
 #include "transfer.h"
 
 int requestResource(const int socket, char *resource) {
-    printf("ENTERED REQUEST RESOURCE\n");
+    //printf("ENTERED REQUEST RESOURCE\n");
 
     char fileCommand[5+strlen(resource)+2], answer[MAX_LENGTH];
     sprintf(fileCommand, "retr %s\r\n", resource);
@@ -14,7 +14,7 @@ int requestResource(const int socket, char *resource) {
 }
 
 int getResource(const int socketA, const int socketB, char *filename) {
-    printf("ENTERED GET RESOURCE\n");
+    //printf("ENTERED GET RESOURCE\n");
 
     FILE *fd = fopen(filename, "wb");
     if (fd == NULL) {
