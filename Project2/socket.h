@@ -10,11 +10,4 @@ int enterPassiveMode(const int socket, char *ip, int *port);
 int readResponse(const int socket, char *buffer);
 int closeConnection(const int socketA);
 
-typedef enum {
-    START,
-    SINGLE,
-    MULTIPLE,
-    END
-} ResponseState;
-
 #endif
