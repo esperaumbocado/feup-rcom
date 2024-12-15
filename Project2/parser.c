@@ -6,7 +6,7 @@
 #include "parser.h"
 
 int parse(char *input, char *host, char *resource, char *file, char *user, char *password, char *ip) {
-    printf("ENTERED PARSE\n");
+    //printf("ENTERED PARSE\n");
 
     if (!contains_slash(input)) return -1;
 
