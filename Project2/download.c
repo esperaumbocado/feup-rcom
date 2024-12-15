@@ -50,7 +50,10 @@ int main(int argc, char *argv[]) {
         exit(-1);
     }
 
-    if (requestResource(socketA, resource) != READY4TRANSFER_CODE) {
+    
+    int requestResourceValue = requestResource(socketA,resource);
+    printf("REQUEST RESOURCE VALUE %d\n", requestResourceValue);
+    if (requestResourceValue != READY4TRANSFER_CODE && requestResourceValue != READY4TRANSFER_CODE2) {
         printf("Unknown resouce '%s' in '%s:%d'\n", resource, ip_pass, port);
         exit(-1);
     }
@@ -60,7 +63,7 @@ int main(int argc, char *argv[]) {
         exit(-1);
     }
 
-    if (closeConnection(socketA, socketB) != 0) {
+    if (closeConnection(socketA) != 0) {
         printf("Sockets close error\n");
         exit(-1);
     }

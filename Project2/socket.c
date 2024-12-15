@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <ctype.h>
 #include "socket.h"
 
 int createSocket(char *ip, int port) {
@@ -31,17 +32,21 @@ int createSocket(char *ip, int port) {
 int authFTP(const int socket, const char* user, const char* pass) {
     printf("ENTERED AUTHCONN\n");
 
-    char userCommand[5 + strlen(user) + 1]; 
-    sprintf(userCommand, "user %s\n", user);
-    char passCommand[5 + strlen(pass) + 1]; 
-    sprintf(passCommand, "pass %s\n", pass);
+    char userCommand[5 + strlen(user) + 2 + 1]; 
+    sprintf(userCommand, "user %s\r\n", user);
+    char passCommand[5 + strlen(pass) + 2 + 1]; 
+    sprintf(passCommand, "pass %s\r\n", pass);
     char answer[MAX_LENGTH];
     
     sendCommand(socket, userCommand);
-    if (readResponse(socket, answer) != READY4PASS_CODE) {
+    int readResponseValue = readResponse(socket,answer);
+    printf("COMMAND SENT | RESPONSE VALUE: %d", readResponseValue);
+    if (readResponseValue != READY4PASS_CODE) {
         printf("Unknown user '%s'. Abort.\n", user);
         exit(-1);
     }
+
+    printf("USER OK\n");
 
     sendCommand(socket, passCommand);
     return readResponse(socket, answer);
@@ -52,7 +57,7 @@ int enterPassiveMode(const int socket, char *ip, int *port) {
 
     char answer[MAX_LENGTH];
     int ip1, ip2, ip3, ip4, port1, port2;
-    char passiveCommand[5] = "pasv\n";
+    char passiveCommand[7] = "pasv\r\n";
     sendCommand(socket, passiveCommand);
     if (readResponse(socket, answer) != PASSIVE_CODE) 
         return -1;
@@ -64,62 +69,57 @@ int enterPassiveMode(const int socket, char *ip, int *port) {
     return PASSIVE_CODE;
 }
 
-int readResponse(const int socket, char* buffer) {
+int readResponse(const int socket, char *buffer) {
     printf("ENTERED READ RESPONSE\n");
-
     char byte;
-    int index = 0, responseCode;
-    ResponseState state = START;
-    memset(buffer, 0, MAX_LENGTH);
+    int index = 0;
+    int responseCode = 0;
 
-    while (state != END) {
-        
-        read(socket, &byte, 1);
-        switch (state) {
-            case START:
-                if (byte == ' ') 
-                    state = SINGLE;
-                else if (byte == '-') 
-                    state = MULTIPLE;
-                else if (byte == '\n') 
-                    state = END;
-                else 
-                    buffer[index++] = byte;
-                break;
-            case SINGLE:
-                if (byte == '\n') 
-                    state = END;
-                else 
-                    buffer[index++] = byte;
-                break;
-            case MULTIPLE:
-                if (byte == '\n') {
-                    memset(buffer, 0, MAX_LENGTH);
-                    state = START;
-                    index = 0;
+    printf("STARTED BUFF CLEAR\n");
+    memset(buffer, 0, MAX_LENGTH);
+    printf("ENDED BUFF CLEAR\n");
+
+    while (1) {
+        if (read(socket, &byte, 1) > 0) {
+            printf("BYTE: %c\n", byte);
+            buffer[index++] = byte;
+            buffer[index] = '\0';
+
+            if (index >= MAX_LENGTH - 1) {
+                fprintf(stderr, "Error: Line too long or malformed response.\n");
+                close(socket);
+                exit(-1);
+            }
+
+            if (byte == '\n') {
+                if (index >= 4 && isdigit(buffer[0]) && isdigit(buffer[1]) &&
+                    isdigit(buffer[2]) && buffer[3] == ' ') {
+                    sscanf(buffer, "%d", &responseCode); 
+                    break;
                 }
-                else 
-                    buffer[index++] = byte;
-                break;
-            case END:
-                break;
-            default:
-                break;
+                index = 0; 
+            }
+        } else {
+            perror("read()");
+            close(socket);
+            exit(-1);
         }
     }
 
-    sscanf(buffer, "%d", &responseCode);
-    printf("-------------------\nResponse Code: %d\n-------------------\n", responseCode);
+    printf("Response: %s", buffer);
+    printf("Response code: %d\n", responseCode);
     return responseCode;
 }
 
-int closeConnection(const int socketA, const int socketB) {
+
+int closeConnection(const int socketA) {
     printf("ENTERED CLOSE CONNECTION\n");
     
     char answer[MAX_LENGTH];
-    char quitCommand[5] = "quit\n";
+    char quitCommand[7] = "quit\r\n";
     sendCommand(socketA, quitCommand);
-    if (readResponse(socketA, answer) != GOODBYE_CODE) 
+    int readResponseValue = readResponse(socketA,answer);
+    if (readResponseValue != GOODBYE_CODE) 
         return -1;
-    return close(socketA) || close(socketB);
+    return close(socketA);
 }

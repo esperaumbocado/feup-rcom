@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <regex.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 #include "parser.h"
@@ -9,12 +8,9 @@
 int parse(char *input, char *host, char *resource, char *file, char *user, char *password, char *ip) {
     printf("ENTERED PARSE\n");
 
-    regex_t regex;
-    regcomp(&regex, "/", 0);
-    if (regexec(&regex, input, 0, NULL, 0)) return -1;
+    if (!contains_slash(input)) return -1;
 
-    regcomp(&regex, "@", 0);
-    if (regexec(&regex, input, 0, NULL, 0) != 0) { // ANONYMOUS MODE
+    if (!contains_at_symbol(input)) { // ANONYMOUS MODE
         
         sscanf(input, "%*[^/]//%[^/]", host);
         strcpy(user, DEFAULT_USER);

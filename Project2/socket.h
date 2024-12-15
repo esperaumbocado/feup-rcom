@@ -8,7 +8,7 @@ int createSocket(char *ip, int port);
 int authFTP(const int socket, const char* user, const char* pass);
 int enterPassiveMode(const int socket, char *ip, int *port);
 int readResponse(const int socket, char *buffer);
-int closeConnection(const int socketA, const int socketB);
+int closeConnection(const int socketA);
 
 typedef enum {
     START,

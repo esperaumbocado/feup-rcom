@@ -7,8 +7,8 @@
 int requestResource(const int socket, char *resource) {
     printf("ENTERED REQUEST RESOURCE\n");
 
-    char fileCommand[5+strlen(resource)+1], answer[MAX_LENGTH];
-    sprintf(fileCommand, "retr %s\n", resource);
+    char fileCommand[5+strlen(resource)+2], answer[MAX_LENGTH];
+    sprintf(fileCommand, "retr %s\r\n", resource);
     sendCommand(socket, fileCommand);
     return readResponse(socket, answer);
 }
@@ -28,6 +28,7 @@ int getResource(const int socketA, const int socketB, char *filename) {
         bytes = read(socketB, buffer, MAX_LENGTH);
         if (fwrite(buffer, bytes, 1, fd) < 0) return -1;
     } while (bytes);
+    close(socketB);
     fclose(fd);
 
     return readResponse(socketA, buffer);
