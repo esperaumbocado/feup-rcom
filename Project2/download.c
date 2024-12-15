@@ -32,7 +32,7 @@ int main(int argc, char *argv[]) {
         switch (currentState) {
             case STATE_INIT:
                 if (argc != 2) {
-                    printf("Usage: ./download ftp://[<user>:<password>@]<host>/<url-path>\n");
+                    printf("Use: ./download ftp://[<user>:<password>@]<host>/<url-path>\n");
                     currentState = STATE_ERROR;
                 } else {
                     currentState = STATE_PARSE_URL;
@@ -41,7 +41,7 @@ int main(int argc, char *argv[]) {
 
             case STATE_PARSE_URL:
                 if (parse(argv[1], host, resource, file, user, password, ip) != 0) {
-                    printf("Parse error. Usage: ./download ftp://[<user>:<password>@]<host>/<url-path>\n");
+                    printf("Error parsing URL. Use: ./download ftp://[<user>:<password>@]<host>/<url-path>\n");
                     currentState = STATE_ERROR;
                 } else {
                     printf("-------------------\n URL INFO\n-------------------\nHost: %s\nResource: %s\nFile: %s\nUser: %s\nPassword: %s\nIP Address: %s\n-------------------\n",
@@ -53,7 +53,7 @@ int main(int argc, char *argv[]) {
             case STATE_CONNECT_CONTROL:
                 socketA = createSocket(ip, FTP_PORT);
                 if (socketA < 0 || readResponse(socketA, answer) != READY4AUTH_CODE) {
-                    printf("Socket to '%s' and port %d failed\n", ip, FTP_PORT);
+                    printf("Failed creating socket to ip '%s' and port %d\n", ip, FTP_PORT);
                     currentState = STATE_ERROR;
                 } else {
                     currentState = STATE_AUTHENTICATE;
@@ -62,7 +62,7 @@ int main(int argc, char *argv[]) {
 
             case STATE_AUTHENTICATE:
                 if (authFTP(socketA, user, password) != LOGINSUCCESS_CODE) {
-                    printf("Authentication failed with username = '%s' and password = '%s'.\n", user, password);
+                    printf("Failed to authenticate: username = '%s' and password = '%s'.\n", user, password);
                     currentState = STATE_ERROR;
                 } else {
                     currentState = STATE_ENTER_PASSIVE;
@@ -71,7 +71,7 @@ int main(int argc, char *argv[]) {
 
             case STATE_ENTER_PASSIVE:
                 if (enterPassiveMode(socketA, ip_pass, &port) != PASSIVE_CODE) {
-                    printf("Passive mode failed\n");
+                    printf("Failed to enter passive mode\n");
                     currentState = STATE_ERROR;
                 } else {
                     currentState = STATE_CONNECT_DATA;
@@ -81,7 +81,7 @@ int main(int argc, char *argv[]) {
             case STATE_CONNECT_DATA:
                 socketB = createSocket(ip_pass, port);
                 if (socketB < 0) {
-                    printf("Socket to '%s:%d' failed\n", ip_pass, port);
+                    printf("Failed creating socket to ip '%s:%d' failed\n", ip_pass, port);
                     currentState = STATE_ERROR;
                 } else {
                     currentState = STATE_REQUEST_RESOURCE;
@@ -93,7 +93,7 @@ int main(int argc, char *argv[]) {
                     int requestResourceValue = requestResource(socketA, resource);
                     //Uprintf("REQUEST RESOURCE VALUE %d\n", requestResourceValue);
                     if (requestResourceValue != READY4TRANSFER_CODE && requestResourceValue != READY4TRANSFER_CODE2) {
-                        printf("Unknown resource '%s' in '%s:%d'\n", resource, ip_pass, port);
+                        printf("Resource not found'%s' in '%s:%d'\n", resource, ip_pass, port);
                         currentState = STATE_ERROR;
                     } else {
                         currentState = STATE_DOWNLOAD_RESOURCE;
@@ -103,7 +103,7 @@ int main(int argc, char *argv[]) {
 
             case STATE_DOWNLOAD_RESOURCE:
                 if (getResource(socketA, socketB, file) != TRANSFER_COMPLETE_CODE) {
-                    printf("Error transferring file '%s' from '%s:%d'\n", file, ip_pass, port);
+                    printf("Error downloading the file '%s' from ip '%s:%d'\n", file, ip_pass, port);
                     currentState = STATE_ERROR;
                 } else {
                     currentState = STATE_CLOSE_CONNECTION;
@@ -112,7 +112,7 @@ int main(int argc, char *argv[]) {
 
             case STATE_CLOSE_CONNECTION:
                 if (closeConnection(socketA) != 0) {
-                    printf("Sockets close error\n");
+                    printf("Error closing controller socket\n");
                     currentState = STATE_ERROR;
                 } else {
                     currentState = STATE_SUCCESS;
